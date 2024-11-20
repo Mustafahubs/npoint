@@ -1,6 +1,6 @@
 source 'https://rubygems.org'
 
-ruby '2.6.5'
+ruby '3.2.4'
 
 gem 'active_model_serializers'
 gem 'bcrypt'
@@ -14,12 +14,17 @@ gem 'pg', '>= 0.18', '< 2.0'
 gem 'puma'
 gem 'rack-attack'
 gem 'rack-cors'
-gem 'rails', '~> 5.1.6'
+gem 'rails', '>= 7.0.8.4'
 gem 'scout_apm'
 gem 'sendgrid-ruby'
 gem 'sentry-raven'
 gem 'turbolinks'
 gem 'uglifier', '>= 1.3.0'
+
+# New version fails to boot with an error after Ruby upgrade. Ideally remove this
+# and configure a manifest file if necessary
+gem 'sprockets', '~>3.0'
+gem 'sprockets-rails'
 
 gem 'sdoc', '~> 0.4.0', group: :doc
 gem 'rails_12factor', group: :production

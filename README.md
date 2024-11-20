@@ -23,16 +23,30 @@ request directly.
 
 #### Setup
 
+It's an old project. To get things running nicely:
+
+```
+fnm use 14.17.0
+
+# Might need this?
+# Python 3.11 introduced an issue that node-gyp hits when building. Use older version
+brew install python@3.10
+export NODE_GYP_FORCE_PYTHON=/opt/homebrew/bin/python3.10
+```
+
 ```bash
-yarn
 bundle
 ```
+
+Note that I'm not using yarn now for local builds; can't seem to get it to reliably install.
+
+Yarn is still used in deploys.
 
 #### Running locally
 
 ```bash
 rails s -p 3001
-yarn dev
+node scripts/start.js
 ```
 
 #### Testing
@@ -44,11 +58,11 @@ Setup:
 
 ```bash
 rspec
-yarn test  # no jest tests yet
+node jest  # no jest tests yet
 ```
 
 **Important note**: Rspec integration tests run against the compiled version of the
-app in `app/assets`. Build with `yarn build` first, or set up capybara to run against
+app in `app/assets`. Build with `node scripts/build.js` first, or set up capybara to run against
 your live webpack version (I haven't done this yet, but have ideas in `spec_helper.rb`).
 
 ## Maintaining
@@ -57,7 +71,7 @@ your live webpack version (I haven't done this yet, but have ideas in `spec_help
 
 ```bash
 # 1. Build files
-yarn build
+node scripts/build.js
 
 # 2. Make an "Add build files" commit
 git commit -a -m "Add build files"

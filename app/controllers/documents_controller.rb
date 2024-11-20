@@ -105,6 +105,8 @@ class DocumentsController < ApplicationController
   end
 
   def create_params
+    byebug
+    puts "hi"
     p = params.permit(:title,
                       :original_contents,
                       :contents_locked,

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "proxy": "http://localhost:3001",
+  "engines" : { 
+    "node" : "14.17.0"
+  },
   "devDependencies": {
     "babel-core": "6.17.0",
     "babel-jest": "17.0.2",
@@ -62,7 +65,8 @@
     "react-router-redux": "^4.0.8",
     "react-transition-group": "1.x",
     "redux": "^4.0.1",
-    "redux-thunk": "^2.3.0"
+    "redux-thunk": "^2.3.0",
+    "yarn": "^1.22.22"
   },
   "scripts": {
     "dev": "node scripts/start.js",
