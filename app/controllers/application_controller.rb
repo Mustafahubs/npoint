@@ -3,11 +3,18 @@ class ApplicationController < ActionController::Base
   # See http://alexzirbel.com/npoint-csrf-test/ for a live test.
   protect_from_forgery with: :exception, prepend: true unless Rails.env.development?
 
+  # Skip CSRF for JSON API requests (check Content-Type since clients may not send Accept header)
+  skip_before_action :verify_authenticity_token, if: :json_request?
+
   rescue_from Exception, with: :internal_server_error
   rescue_from ActiveRecord::RecordNotFound, with: :not_found
   rescue_from ActionController::ParameterMissing, with: :missing_param
 
   protected
+
+  def json_request?
+    request.content_type =~ /application\/json/
+  end
 
   def not_found
     head :not_found

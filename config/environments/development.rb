@@ -55,9 +55,9 @@ Rails.application.configure do
   config.file_watcher = ActiveSupport::EventedFileUpdateChecker
 
   # https://github.com/rspec/rspec-rails/issues/1275
-  config.action_controller.default_url_options= { host: ENV['HOST'], port: 3001 }
+  config.action_controller.default_url_options= { host: ENV['HOST'] || 'localhost', port: 3001 }
 end
 
 # https://github.com/rspec/rspec-rails/issues/1275
-Rails.application.routes.default_url_options[:host] = ENV['HOST']
+Rails.application.routes.default_url_options[:host] = ENV['HOST'] || 'localhost'
 Rails.application.routes.default_url_options[:port] = 3001

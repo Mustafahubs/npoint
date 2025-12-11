@@ -5,6 +5,7 @@ ruby '3.2.4'
 gem 'active_model_serializers'
 gem 'bcrypt'
 gem 'devise'
+gem 'json', '~> 2.7'
 gem 'factory_bot_rails'
 gem 'faker'
 gem 'jbuilder', '~> 2.0'
@@ -26,7 +27,7 @@ gem 'uglifier', '>= 1.3.0'
 gem 'importmap-rails'
 gem 'propshaft'
 
-gem 'sdoc', '~> 0.4.0', group: :doc
+# gem 'sdoc', '~> 0.4.0', group: :doc  # Removed - blocks json gem update
 gem 'rails_12factor', group: :production
 
 group :development, :test do
