@@ -13,6 +13,7 @@ class DocumentsController < ApplicationController
   end
 
   def create
+    puts "in create"
     @document = Document.new(create_params.merge(user_id: current_user&.id))
 
     if params[:generate_contents]
@@ -105,8 +106,6 @@ class DocumentsController < ApplicationController
   end
 
   def create_params
-    byebug
-    puts "hi"
     p = params.permit(:title,
                       :original_contents,
                       :contents_locked,

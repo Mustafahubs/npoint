@@ -12,19 +12,19 @@ gem 'json-schema'
 gem 'json-schema-generator'
 gem 'pg', '>= 0.18', '< 2.0'
 gem 'puma'
+gem 'rack', '~> 3.0'
 gem 'rack-attack'
 gem 'rack-cors'
-gem 'rails', '>= 7.0.8.4'
+gem 'rails', '>= 8.1.1'
 gem 'scout_apm'
 gem 'sendgrid-ruby'
 gem 'sentry-raven'
 gem 'turbolinks'
 gem 'uglifier', '>= 1.3.0'
 
-# New version fails to boot with an error after Ruby upgrade. Ideally remove this
-# and configure a manifest file if necessary
-gem 'sprockets', '~>3.0'
-gem 'sprockets-rails'
+# new from rails 8?
+gem 'importmap-rails'
+gem 'propshaft'
 
 gem 'sdoc', '~> 0.4.0', group: :doc
 gem 'rails_12factor', group: :production

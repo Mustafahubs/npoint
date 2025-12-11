@@ -2,6 +2,9 @@ class RegistrationsController < Devise::RegistrationsController
   clear_respond_to
   respond_to :json
 
+  # Tell Rails to wrap JSON params (Rails 8 change)
+  wrap_parameters false
+
   private
 
   def sign_up_params
