@@ -26,7 +26,7 @@ RSpec.describe Api::DocumentsController do
         get :show, params: { token: document.token, path: 'name' }
 
         expect(response).to have_http_status(200)
-        expect(parsed_response).to eq('"John"')
+        expect(parsed_response).to eq('John')
       end
 
       it 'returns an error for bad sub-properties' do
@@ -50,7 +50,7 @@ RSpec.describe Api::DocumentsController do
         get :show, params: { token: document.token, path: 'a/b/c' }
 
         expect(response).to have_http_status(200)
-        expect(parsed_response).to eq('"wow"')
+        expect(parsed_response).to eq('wow')
       end
     end
 
@@ -76,7 +76,7 @@ RSpec.describe Api::DocumentsController do
         get :show, params: { token: document.token, path: 'list/1/s' }
 
         expect(response).to have_http_status(200)
-        expect(parsed_response).to eq('"second"')
+        expect(parsed_response).to eq('second')
       end
 
       it 'returns an error for non-integer indexes' do
@@ -109,7 +109,7 @@ RSpec.describe Api::DocumentsController do
 
           expect(response).to have_http_status(200)
           expect(response.content_type).to eq('text/plain; charset=utf-8')
-          expect(parsed_response).to eq(contents['data'].to_json)
+          expect(parsed_response).to eq(contents['data'])
         end
       end
 
