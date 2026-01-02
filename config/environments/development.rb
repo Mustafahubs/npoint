@@ -56,6 +56,9 @@ Rails.application.configure do
 
   # https://github.com/rspec/rspec-rails/issues/1275
   config.action_controller.default_url_options= { host: ENV['HOST'] || 'localhost', port: 3001 }
+
+  # Allow api.localhost subdomain routing
+  config.action_dispatch.tld_length = 0
 end
 
 # https://github.com/rspec/rspec-rails/issues/1275
