@@ -1,36 +1,47 @@
-# In-memory bandwidth tracking for API requests
+# Redis-backed bandwidth tracking for API requests
 class BandwidthTracker
   class << self
-    # Store: { token => [{ timestamp: Time, bytes: Integer }, ...] }
-    def data
-      @data ||= {}
-    end
+    REDIS_KEY_PREFIX = 'bandwidth'.freeze
+    RETENTION_PERIOD = 24.hours
 
     # Track bandwidth for a document token
     def track(token, bytes)
       return unless token.present? && bytes.positive?
 
-      data[token] ||= []
-      data[token] << { timestamp: Time.current, bytes: bytes }
+      timestamp = Time.current.to_i
+      key = redis_key(token)
 
-      # Cleanup old data (keep last 24 hours)
-      cleanup_old_data
+      # Store as sorted set with timestamp as score
+      REDIS.zadd(key, timestamp, "#{timestamp}:#{bytes}")
+
+      # Set expiration to auto-cleanup old data
+      REDIS.expire(key, RETENTION_PERIOD.to_i)
+
+      # Periodic cleanup of old entries
+      cleanup_old_data(key)
     end
 
     # Get bandwidth stats for last N hours (default 24)
     def stats(hours: 24)
-      cutoff = hours.hours.ago
+      cutoff = hours.hours.ago.to_i
+      tokens = all_tokens
 
-      results = data.map do |token, entries|
-        recent_entries = entries.select { |e| e[:timestamp] > cutoff }
-        next if recent_entries.empty?
+      results = tokens.map do |token|
+        key = redis_key(token)
+        entries = REDIS.zrangebyscore(key, cutoff, '+inf')
+        next if entries.empty?
+
+        parsed_entries = entries.map do |entry|
+          timestamp, bytes = entry.split(':').map(&:to_i)
+          { timestamp: Time.at(timestamp), bytes: bytes }
+        end
 
         {
           token: token,
-          total_bytes: recent_entries.sum { |e| e[:bytes] },
-          request_count: recent_entries.size,
-          first_seen: recent_entries.map { |e| e[:timestamp] }.min,
-          last_seen: recent_entries.map { |e| e[:timestamp] }.max
+          total_bytes: parsed_entries.sum { |e| e[:bytes] },
+          request_count: parsed_entries.size,
+          first_seen: parsed_entries.map { |e| e[:timestamp] }.min,
+          last_seen: parsed_entries.map { |e| e[:timestamp] }.max
         }
       end.compact
 
@@ -44,24 +55,27 @@ class BandwidthTracker
 
     # Clear all data
     def clear!
-      @data = {}
+      keys = REDIS.keys("#{REDIS_KEY_PREFIX}:*")
+      REDIS.del(*keys) if keys.any?
     end
 
     private
 
-    # Remove entries older than 24 hours
-    def cleanup_old_data
-      return if @last_cleanup && @last_cleanup > 1.hour.ago
+    # Get Redis key for a token
+    def redis_key(token)
+      "#{REDIS_KEY_PREFIX}:#{token}"
+    end
 
-      cutoff = 24.hours.ago
-      data.each do |token, entries|
-        data[token] = entries.select { |e| e[:timestamp] > cutoff }
-      end
+    # Get all tracked tokens
+    def all_tokens
+      keys = REDIS.keys("#{REDIS_KEY_PREFIX}:*")
+      keys.map { |key| key.sub("#{REDIS_KEY_PREFIX}:", '') }
+    end
 
-      # Remove tokens with no recent data
-      data.delete_if { |_, entries| entries.empty? }
-
-      @last_cleanup = Time.current
+    # Remove entries older than retention period
+    def cleanup_old_data(key)
+      cutoff = RETENTION_PERIOD.ago.to_i
+      REDIS.zremrangebyscore(key, '-inf', cutoff)
     end
   end
 end

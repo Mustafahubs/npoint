@@ -1,4 +1,7 @@
 class Rack::Attack
+  # Use Redis for multi-server rate limiting
+  Rack::Attack.cache.store = Rack::Attack::StoreProxy::RedisStoreProxy.new(REDIS)
+
   ### Safelist (exempt from throttling) ###
 
   # Exempt admin endpoints from rate limiting

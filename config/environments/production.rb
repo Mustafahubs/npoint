@@ -54,8 +54,7 @@ Rails.application.configure do
   # Prepend all log lines with the following tags.
   config.log_tags = [ :request_id ]
 
-  # Use a different cache store in production.
-  # Use memory_store for rack-attack and bandwidth tracking
+  # Use memory_store for Rails.cache (Redis used for Rack::Attack and BandwidthTracker)
   config.cache_store = :memory_store
 
   # Use a real queuing backend for Active Job (and separate queues per environment)
