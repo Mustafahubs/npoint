@@ -10,6 +10,8 @@ class Api::DocumentsController < ApplicationController
   before_action :check_api_update_rights!, :only => [:update]
 
   def show
+    return head :not_found unless document.present?
+
     contents = document.contents
 
     if params[:path]
