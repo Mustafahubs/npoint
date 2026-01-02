@@ -9,7 +9,12 @@ class BandwidthTrackerMiddleware
     # Only track API subdomain GET requests
     request = ActionDispatch::Request.new(env)
 
-    if api_request?(request) && request.get?
+    is_api = api_request?(request)
+    is_get = request.get?
+
+    Rails.logger.info "[BandwidthTracker] Request: host=#{request.host} path=#{request.path} is_api=#{is_api} is_get=#{is_get}"
+
+    if is_api && is_get
       track_bandwidth(env, request)
     else
       @app.call(env)
@@ -33,6 +38,7 @@ class BandwidthTrackerMiddleware
       # Calculate response size
       response_size = calculate_size(body)
       BandwidthTracker.track(token, response_size)
+      Rails.logger.info "[BandwidthTracker] Tracked #{response_size} bytes for token #{token}"
     end
 
     [status, headers, body]
