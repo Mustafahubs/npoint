@@ -13,7 +13,6 @@ class DocumentsController < ApplicationController
   end
 
   def create
-    puts "in create"
     @document = Document.new(create_params.merge(user_id: current_user&.id))
 
     if params[:generate_contents]

@@ -26,7 +26,8 @@ request directly.
 It's an old project. To get things running nicely:
 
 ```
-fnm use 14.17.0
+# Something like this
+asdf use nodejs v25.2.1
 
 # Might need this?
 # Python 3.11 introduced an issue that node-gyp hits when building. Use older version

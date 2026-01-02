@@ -27,14 +27,4 @@ class ApplicationController < ActionController::Base
   def missing_param
     head :bad_request
   end
-
-  rescue_from ActionDispatch::Http::Parameters::ParseError do |exception|
-    Rails.logger.error "Parameter parsing failed:"
-    Rails.logger.error "Raw body: #{request.raw_post}"
-    Rails.logger.error "Content-Type: #{request.content_type}"
-    Rails.logger.error "Exception: #{exception.class} - #{exception.message}"
-    Rails.logger.error exception.backtrace.join("\n")
-
-    render json: { error: 'Invalid request parameters' }, status: :bad_request
-  end
 end

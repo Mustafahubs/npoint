@@ -4,7 +4,6 @@ class SessionsController < Devise::SessionsController
   after_action :set_csrf_headers, only: [:create, :destroy]
 
   def info
-    puts "in users info"
     if user_signed_in?
       render json: current_user, serializer: UserSerializer
     else
