@@ -6,6 +6,8 @@ require 'rails/all'
 # you've limited to :test, :development, or :production.
 Bundler.require(*Rails.groups)
 
+require_relative '../lib/bandwidth_tracker_middleware'
+
 module Npoint
   class Application < Rails::Application
     # Initialize configuration defaults for Rails version.
@@ -24,6 +26,9 @@ module Npoint
     # config.i18n.default_locale = :de
 
     config.autoload_paths << Rails.root.join('lib')
+
+    # Track API bandwidth usage
+    config.middleware.use BandwidthTrackerMiddleware
 
     config.middleware.insert_before 0, Rack::Cors do
       allow do

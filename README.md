@@ -84,6 +84,30 @@ Push to master. This deploys staging.
 
 Deploy prod manually via render UI.
 
+#### Bandwidth tracking (Admin)
+
+To monitor which API documents are using the most bandwidth, first set credentials:
+
+```bash
+export ADMIN_USERNAME=your_username
+export ADMIN_PASSWORD=your_secure_password
+```
+
+Then access the endpoint with HTTP Basic Auth:
+
+```bash
+# View top 20 documents by bandwidth (last 24 hours)
+curl -u $ADMIN_USERNAME:$ADMIN_PASSWORD http://localhost:3001/admin/bandwidth
+
+# Custom time window and limit
+curl -u $ADMIN_USERNAME:$ADMIN_PASSWORD http://localhost:3001/admin/bandwidth?hours=12&limit=50
+
+# Clear tracking data
+curl -u $ADMIN_USERNAME:$ADMIN_PASSWORD -X POST http://localhost:3001/admin/bandwidth/clear
+```
+
+Tracking runs in-memory and automatically cleans up data older than 24 hours.
+
 ## Similar Tools
 
 * [JSONbin.io](https://jsonbin.io/)

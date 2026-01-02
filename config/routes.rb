@@ -13,6 +13,12 @@ Rails.application.routes.draw do
   post 'users/send_reset_password_email' => 'reset_password#send_reset_password_email'
   post 'users/reset_password' => 'reset_password#reset_password'
 
+  # Admin endpoints
+  namespace :admin do
+    get 'bandwidth' => 'bandwidth#index'
+    post 'bandwidth/clear' => 'bandwidth#clear'
+  end
+
   constraints :subdomain => 'api' do
     namespace :api, path: nil, defaults: { format: 'json' } do
       match '/:token(/*path)', to: 'documents#show', via: [:get, :options]

@@ -1,4 +1,11 @@
 class Rack::Attack
+  ### Safelist (exempt from throttling) ###
+
+  # Exempt admin endpoints from rate limiting
+  safelist('admin endpoints') do |req|
+    req.path.start_with?('/admin/')
+  end
+
   ### Throttle Spammy Clients ###
 
   # If any single client IP is making tons of requests, then they're
