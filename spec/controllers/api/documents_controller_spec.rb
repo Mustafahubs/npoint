@@ -98,7 +98,7 @@ RSpec.describe Api::DocumentsController do
           get :show, params: { token: document.token, path: 'data' }
 
           expect(response).to have_http_status(200)
-          expect(response.content_type).to eq('application/json')
+          expect(response.content_type).to eq('application/json; charset=utf-8')
           expect(parsed_response).to eq(contents['data'])
         end
       end
@@ -108,7 +108,7 @@ RSpec.describe Api::DocumentsController do
           get :show, params: { token: document.token, path: 'data' }
 
           expect(response).to have_http_status(200)
-          expect(response.content_type).to eq('text/plain')
+          expect(response.content_type).to eq('text/plain; charset=utf-8')
           expect(parsed_response).to eq(contents['data'].to_json)
         end
       end
@@ -152,7 +152,7 @@ RSpec.describe Api::DocumentsController do
           post :update, params: { token: document.token }, body: new_contents.to_json
 
           expect(response).to have_http_status(200)
-          expect(response.content_type).to eq('application/json')
+          expect(response.content_type).to eq('application/json; charset=utf-8')
           expect(parsed_response).to eq(new_contents)
         }.to change{ document.reload.contents }.from(contents).to(new_contents)
       end
