@@ -12,6 +12,11 @@ class Api::DocumentsController < ApplicationController
   def show
     return head :not_found unless document.present?
 
+    # Update last accessed timestamp (max once per minute)
+    if document.last_accessed_at.nil? || document.last_accessed_at < 1.minute.ago
+      document.update_column(:last_accessed_at, Time.current)
+    end
+
     contents = document.contents
 
     if params[:path]
