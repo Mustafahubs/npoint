@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_01_03_221540) do
+ActiveRecord::Schema[8.1].define(version: 2026_01_04_011400) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -27,6 +27,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_03_221540) do
     t.string "token", null: false
     t.datetime "updated_at", null: false
     t.integer "user_id"
+    t.index ["last_accessed_at"], name: "index_documents_on_last_accessed_at"
     t.index ["token"], name: "index_documents_on_token"
     t.index ["user_id"], name: "index_documents_on_user_id"
   end
