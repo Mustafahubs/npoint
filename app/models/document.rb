@@ -44,6 +44,6 @@ class Document < ActiveRecord::Base
     return unless saved_change_to_contents?
     return unless ENV['HOST'].present?
 
-    CloudflareCache.purge_by_prefix("https://api.#{ENV['HOST']}/#{token}")
+    CloudflareCache.purge_by_prefix("api.#{ENV['HOST']}/#{token}")
   end
 end
