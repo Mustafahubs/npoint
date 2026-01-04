@@ -24,10 +24,14 @@ class CloudflareCache
       http.request(request)
     end
 
-    if response.code.to_i >= 400
-      Rails.logger.error("CloudFlare cache purge failed for #{prefix}: #{response.body}")
+    response_data = JSON.parse(response.body)
+
+    if response_data['success']
+      Rails.logger.info("CloudFlare cache purged successfully for prefix: #{prefix}")
     else
-      Rails.logger.info("CloudFlare cache purged for prefix: #{prefix}")
+      Rails.logger.error("CloudFlare cache purge failed for #{prefix}")
+      Rails.logger.error("Errors: #{response_data['errors']}")
+      Rails.logger.error("Full response: #{response.body}")
     end
   rescue => e
     # Don't fail the request if cache purge fails
