@@ -1,5 +1,6 @@
 class Document < ActiveRecord::Base
   before_validation :create_unique_identifier, on: :create
+  after_update :purge_cloudflare_cache
 
   validate :contents_must_match_schema
   validates :token, presence: true, uniqueness: true
@@ -35,6 +36,13 @@ class Document < ActiveRecord::Base
         schema != [] &&
         !JSON::Validator.validate(schema, contents)
       errors.add(:contents, "does not match schema")
+    end
+  end
+
+  def purge_cloudflare_cache
+    # Only purge if contents or schema changed
+    if saved_change_to_contents? || saved_change_to_schema?
+      CloudflareCache.purge_by_prefix("https://api.npoint.io/#{token}")
     end
   end
 end

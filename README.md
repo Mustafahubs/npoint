@@ -128,7 +128,10 @@ I'd recommend setting it up on [render.com](https://render.com/), which is what
 I use for [npoint.io](https://www.npoint.io).
 
 1. Set up a hosted Potsgres DB in render, and make sure `DATABASE_URL` points there
-2. Configure environment variables. You'll at least need `HOST` (e.g. `npoint.io`)
+2. Configure environment variables. You'll at least need:
+   - `HOST` (e.g. `npoint.io`)
+   - `CLOUDFLARE_API_TOKEN` (optional, for cache purging)
+   - `CLOUDFLARE_ZONE_ID` (optional, for cache purging)
 3. Use these render settings:
 
 ```

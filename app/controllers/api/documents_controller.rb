@@ -12,6 +12,9 @@ class Api::DocumentsController < ApplicationController
   def show
     return head :not_found unless document.present?
 
+    # Set cache headers for CloudFlare
+    response.headers['Cache-Control'] = 'public, max-age=3600' # 1 hour
+
     # Update last accessed timestamp (max once per minute)
     if document.last_accessed_at.nil? || document.last_accessed_at < 1.minute.ago
       document.update_column(:last_accessed_at, Time.current)
