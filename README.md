@@ -1,4 +1,4 @@
-# n:point [![CircleCI](https://circleci.com/gh/azirbel/npoint/tree/master.svg?style=svg)](https://circleci.com/gh/azirbel/npoint/tree/master)
+# n:point [![CircleCI](https://circleci.com/gh/azirbel/npoint/tree/main.svg?style=svg)](https://circleci.com/gh/azirbel/npoint/tree/main)
 
 [npoint.io](https://www.npoint.io/) is a lightweight data store for your app or prototype.
 
@@ -80,7 +80,7 @@ git commit -a -m "Add build files"
 
 #### Deploying
 
-Push to master. This deploys staging.
+Push to main. This deploys staging.
 
 Deploy prod manually via render UI.
 
