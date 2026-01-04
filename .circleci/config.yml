@@ -1,28 +1,25 @@
-# Ruby CircleCI 2.0 configuration file
-#
-# Check https://circleci.com/docs/2.0/language-ruby/ for more details
-#
-version: 2
+version: 2.1
+
+orbs:
+  node: circleci/node@5.1.0
+
 jobs:
   build:
     docker:
-      # https://discuss.circleci.com/t/rails-app-cant-connect-to-postgres-server/13059/7
-      - image: circleci/ruby:2.3.5-node-browsers
+      - image: cimg/ruby:3.2.4-node
         environment:
           PGHOST: 127.0.0.1
           PGUSER: npoint
           PG_HOST: 127.0.0.1
           PG_USER: npoint
           RAILS_ENV: test
-      
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      - image: circleci/postgres:10.3-alpine-ram
+          BUNDLE_PATH: vendor/bundle
+
+      - image: cimg/postgres:16.1
         environment:
           POSTGRES_USER: npoint
           POSTGRES_DB: npoint_test
-          POSTGRES_PASSWORD: ""
+          POSTGRES_HOST_AUTH_METHOD: trust
 
     working_directory: ~/repo
 
@@ -32,44 +29,49 @@ jobs:
       # Download and cache dependencies
       - restore_cache:
           keys:
-          - v1-dependencies-{{ checksum "Gemfile.lock" }}
-          # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
+            - v2-dependencies-{{ checksum "Gemfile.lock" }}
+            - v2-dependencies-
 
       - run:
-          name: install dependencies
+          name: Install dependencies
           command: |
-            bundle install --jobs=4 --retry=3 --path vendor/bundle
+            bundle install --jobs=4 --retry=3
 
       - save_cache:
           paths:
             - ./vendor/bundle
-          key: v1-dependencies-{{ checksum "Gemfile.lock" }}
+          key: v2-dependencies-{{ checksum "Gemfile.lock" }}
 
       # Wait for DB
-      # From https://robots.thoughtbot.com/circleci-2-rails
-      - run: dockerize -wait tcp://localhost:5432 -timeout 1m
-        
-      # Database setup
-      - run: bundle exec rake db:create
-      - run: bundle exec rake db:schema:load
-
-      # run tests!
       - run:
-          name: run tests
+          name: Wait for DB
+          command: dockerize -wait tcp://localhost:5432 -timeout 1m
+
+      # Database setup
+      - run:
+          name: Database setup
           command: |
-            mkdir /tmp/test-results
-            TEST_FILES="$(circleci tests glob "spec/**/*_spec.rb" | circleci tests split --split-by=timings)"
-            
+            bundle exec rake db:create
+            bundle exec rake db:schema:load
+
+      # Run tests
+      - run:
+          name: Run tests
+          command: |
+            mkdir -p /tmp/test-results
             bundle exec rspec --format progress \
                             --format RspecJunitFormatter \
-                            --out /tmp/test-results/rspec.xml \
-                            --format progress \
-                            $TEST_FILES
+                            --out /tmp/test-results/rspec.xml
 
-      # collect reports
+      # Collect reports
       - store_test_results:
           path: /tmp/test-results
       - store_artifacts:
           path: /tmp/test-results
           destination: test-results
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build
