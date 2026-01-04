@@ -40,9 +40,10 @@ class Document < ActiveRecord::Base
   end
 
   def purge_cloudflare_cache
-    # Only purge if contents or schema changed
-    if saved_change_to_contents? || saved_change_to_schema?
-      CloudflareCache.purge_by_prefix("https://api.npoint.io/#{token}")
-    end
+    # Only purge if contents changed
+    return unless saved_change_to_contents?
+    return unless ENV['HOST'].present?
+
+    CloudflareCache.purge_by_prefix("https://api.#{ENV['HOST']}/#{token}")
   end
 end
