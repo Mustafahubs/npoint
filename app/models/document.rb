@@ -1,11 +1,14 @@
 class Document < ActiveRecord::Base
   before_validation :create_unique_identifier, on: :create
+  before_save :detect_malicious_content
   after_update :purge_cloudflare_cache
 
   validate :contents_must_match_schema
   validates :token, presence: true, uniqueness: true
 
   belongs_to :user, optional: true
+
+  MALICIOUS_VALUE_PATTERN = /\A\s*\(?\s*function\s*\(/
 
   # 5 years to guess a specific token at 10k attempts/second:
   # log(16, 10000 * 60 * 60 * 24 * 365 * 5) ~= 10.13
@@ -29,7 +32,19 @@ class Document < ActiveRecord::Base
     u == user
   end
 
+  def content_looks_malicious?
+    return false unless contents.is_a?(Hash)
+
+    contents.any? do |_key, value|
+      value.is_a?(String) && value.match?(MALICIOUS_VALUE_PATTERN)
+    end
+  end
+
   private
+
+  def detect_malicious_content
+    self.flagged_malicious = content_looks_malicious?
+  end
 
   def contents_must_match_schema
     if schema.present? &&

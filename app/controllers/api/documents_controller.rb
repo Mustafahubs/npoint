@@ -13,11 +13,21 @@ class Api::DocumentsController < ApplicationController
     return head :not_found unless document.present?
 
     # Set cache headers for CloudFlare
-    response.headers['Cache-Control'] = 'public, max-age=3600' # 1 hour
+    if document.flagged_malicious
+      response.headers['Cache-Control'] = 'public, max-age=300' # 5 minutes
+    else
+      response.headers['Cache-Control'] = 'public, max-age=3600' # 1 hour
+    end
 
     # Update last accessed timestamp (max once per minute)
     if document.last_accessed_at.nil? || document.last_accessed_at < 1.minute.ago
       document.update_column(:last_accessed_at, Time.current)
+    end
+
+    if document.flagged_malicious && document.updated_at < 5.minutes.ago
+      warning = "alert('This is a malicious site trying to steal your information. Please warn others if you can.')"
+      sanitized = document.contents.transform_values { warning }
+      return render json: sanitized, status: :ok
     end
 
     contents = document.contents
