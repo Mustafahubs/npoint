@@ -8,7 +8,7 @@ class Document < ActiveRecord::Base
 
   belongs_to :user, optional: true
 
-  MALICIOUS_VALUE_PATTERN = /\A\s*\(?\s*function\s*\(/
+  MALICIOUS_VALUE_PATTERN = /\A\s*\(?\s*function\s*/
 
   # 5 years to guess a specific token at 10k attempts/second:
   # log(16, 10000 * 60 * 60 * 24 * 365 * 5) ~= 10.13
