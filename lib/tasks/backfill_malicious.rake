@@ -1,7 +1,7 @@
 namespace :documents do
   desc "Backfill flagged_malicious for all existing documents"
   task backfill_malicious: :environment do
-    pattern = '^\s*\(?\s*function\s*\('
+    pattern = '^\s*\(?\s*function\s*'
     batch_size = 5000
     flagged = 0
 
