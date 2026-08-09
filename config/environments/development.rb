@@ -67,23 +67,33 @@ Rails.application.configure do
     protocol: public_protocol,
   }
 
-  # Subdomain routing (used for the api.<host> public API) needs to know how
-  # many trailing host segments form the "domain" vs. the subdomain.
-  # localhost has no real TLD, so 0. A real domain like yourdomain.com is
-  # correctly handled by Rails' own default of 1 - no override needed.
-  # Set TLD_LENGTH explicitly if your domain needs something else (e.g. a
-  # co.uk-style domain needs 2).
+  # Subdomain routing (used for the API_SUBDOMAIN.<host> public API - see
+  # config/routes.rb) needs to know how many trailing host segments form the
+  # "domain" vs. the subdomain. localhost has no real TLD, so 0. A real
+  # domain like yourdomain.com, or a single dedicated subdomain of one like
+  # npoint.yourdomain.com paired with api-npoint.yourdomain.com, is
+  # correctly handled by Rails' own default of 1 - no override needed
+  # either way, since in both cases the API host is exactly one label under
+  # a 2-label domain. Set TLD_LENGTH explicitly if your domain needs
+  # something else (e.g. a co.uk-style domain needs 2).
   config.action_dispatch.tld_length =
     ENV.fetch('TLD_LENGTH', public_host == 'localhost' ? 0 : 1).to_i
 
   # Rails' Host Authorization middleware only allows .localhost/.test/IP
   # hosts by default in development - a real domain (e.g. behind a
   # Cloudflare Tunnel) would otherwise get a 403 Blocked Host error. Allow
-  # HOST itself and its subdomains (so both the main app and the api.<HOST>
-  # public API work) whenever HOST is set to something other than localhost.
+  # HOST itself plus every subdomain of its registrable (last-two-label)
+  # domain, so both the main app and the API_SUBDOMAIN.<host> public API
+  # work - including when the API host is a *sibling* of HOST rather than a
+  # subdomain of it (e.g. HOST=npoint.yourdomain.com with
+  # API_SUBDOMAIN=api-npoint, giving api-npoint.yourdomain.com - see
+  # docs/cloudflare-tunnel.md). Only handles standard 2-label domains
+  # (yourdomain.com); a co.uk-style domain needs its own config.hosts entry
+  # added manually.
   if public_host != 'localhost'
     config.hosts << public_host
-    config.hosts << ".#{public_host}"
+    registrable_domain = public_host.split('.').last(2).join('.')
+    config.hosts << ".#{registrable_domain}"
   end
 end
 

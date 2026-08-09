@@ -19,8 +19,12 @@ class BandwidthTrackerMiddleware
   private
 
   def api_request?(request)
-    # Check if this is an api.* subdomain request
-    request.host =~ /^api\./
+    # Check if this is an API-subdomain request. See API_SUBDOMAIN in
+    # config/routes.rb - defaults to "api" (api.<host>) but may be
+    # something like "api-npoint" (api-npoint.<host>) on deployments where
+    # a two-level subdomain isn't usable (e.g. Cloudflare's free-plan
+    # certificate coverage - see docs/cloudflare-tunnel.md).
+    request.host.downcase.start_with?("#{ENV.fetch('API_SUBDOMAIN', 'api')}.")
   end
 
   def track_bandwidth(env, request)

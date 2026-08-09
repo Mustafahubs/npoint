@@ -26,7 +26,10 @@ class Rack::Attack
 
   # Throttle requests per document (10 per second = 600rpm)
   throttle('limit document calls by token', limit: 600, period: 1.minute) do |req|
-    if req.url.match(/^https?:\/\/api./)
+    # See API_SUBDOMAIN in config/routes.rb - defaults to "api" but may be
+    # overridden (e.g. "api-npoint") on deployments where a two-level
+    # subdomain isn't usable.
+    if req.url.match(/\Ahttps?:\/\/#{Regexp.escape(ENV.fetch('API_SUBDOMAIN', 'api'))}\./)
       # API route
       req.path.match(/\/([A-Za-z0-9]{20})/)&.[](1) # tokens are 20 chars
     elsif req.path.match(/\/documents\/[A-Za-z0-9]{20}/)

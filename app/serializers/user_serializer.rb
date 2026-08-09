@@ -17,6 +17,6 @@ class UserSerializer < ActiveModel::Serializer
   end
 
   def sample_update_url
-    url_for(controller: 'api/documents', subdomain: 'api', action: 'update', token: 'DOC_ID')
+    url_for(controller: 'api/documents', subdomain: ENV.fetch('API_SUBDOMAIN', 'api'), action: 'update', token: 'DOC_ID')
   end
 end

@@ -17,12 +17,29 @@ container alongside the app, defined in `docker-compose.tunnel.yml`.
 - Your local Docker deployment, reachable at a subdomain you choose, e.g.
   `https://npoint.yourdomain.com` - automatically TLS-terminated by
   Cloudflare, no certificate setup needed.
-- The public JSON API also reachable at `https://api.npoint.yourdomain.com`
-  (n:point uses an `api.` subdomain of whatever host it's running under for
-  its public document-access API - see the [OpenAPI docs](/api-docs) once
-  the app is running).
-- Both routes point at the exact same container; Rails tells them apart by
-  the `Host` header, same as it does locally with `api.localhost`.
+- The public JSON API also reachable at a second hostname (n:point routes
+  its public document-access API from a distinct host - see the
+  [OpenAPI docs](/api-docs) once the app is running). Both routes point at
+  the exact same container; Rails tells them apart by the `Host` header,
+  same as it does locally with `api.localhost`.
+
+**Important - Cloudflare's free plan only certifies one level of
+subdomain.** Its Universal SSL certificate covers `yourdomain.com` and
+`*.yourdomain.com`, but *not* a second level like
+`api.npoint.yourdomain.com` - that request would fail TLS entirely. So the
+exact hostname to use for the API depends on which pattern you pick below;
+either way, keep both hostnames exactly **one label** under your apex
+domain.
+
+| Pattern | Main app | Public API |
+|---|---|---|
+| Dedicated subdomain (recommended if you use this domain for other things) | `npoint.yourdomain.com` | `api-npoint.yourdomain.com` (hyphen, not a dot - see why above) |
+| Bare apex domain | `yourdomain.com` | `api.yourdomain.com` |
+
+Both are one label under `yourdomain.com`, so both work fine on Cloudflare's
+free plan. This guide uses the dedicated-subdomain pattern; substitute the
+apex-domain values if you'd rather use that instead (and skip setting
+`API_SUBDOMAIN` in step 3 - `api` is the default).
 
 ## 1. Create a tunnel
 
@@ -43,7 +60,7 @@ public hostname**, and add two entries, both pointing at the same service:
 
 | Field       | First entry                     | Second entry                        |
 |-------------|----------------------------------|--------------------------------------|
-| Subdomain   | `npoint` (or whatever you like)  | `api.npoint` (must match, prefixed with `api.`) |
+| Subdomain   | `npoint` (or whatever you like)  | `api-npoint` (hyphen, matching the first - see why above) |
 | Domain      | `yourdomain.com`                 | `yourdomain.com`                     |
 | Path        | *(leave blank)*                  | *(leave blank)*                      |
 | Type        | HTTP                             | HTTP                                 |
@@ -56,8 +73,8 @@ publishes port 3001 to your host by default too, so local access keeps
 working side by side.)
 
 If you'd rather dedicate your whole domain to n:point instead of a
-subdomain, use `yourdomain.com` and `api.yourdomain.com` instead - see the
-`TLD_LENGTH` note in step 3.
+subdomain, use `yourdomain.com` and `api.yourdomain.com` instead (a plain
+dot works here since it's still only one label deep) - see step 3.
 
 ## 3. Configure environment variables
 
@@ -68,6 +85,15 @@ Create a `.env` file in the repo root (same folder as `docker-compose.yml`):
 CLOUDFLARE_TUNNEL_TOKEN=paste-the-token-from-step-1-here
 HOST=npoint.yourdomain.com
 
+# Only needed for the dedicated-subdomain pattern (as set up above) - tells
+# the app to route/generate API links at api-npoint.<HOST's domain> instead
+# of the default api.<HOST>, since api.npoint.yourdomain.com wouldn't get a
+# certificate on Cloudflare's free plan (see the note above step 1).
+# Match whatever subdomain you actually used in step 2. Not needed at all
+# if you're using the bare-apex-domain pattern instead - leave it unset and
+# "api" (the default) is correct.
+API_SUBDOMAIN=api-npoint
+
 # Generate a real secret - do NOT skip this, the default committed secret
 # is public (it's in this open-source repo) and must not be used for
 # anything reachable from the internet.
@@ -75,23 +101,16 @@ HOST=npoint.yourdomain.com
 SECRET_KEY_BASE=paste-the-generated-secret-here
 ```
 
-**About `TLD_LENGTH`** - n:point's public API works by routing based on the
-`api.` subdomain, so the app needs to know how many parts of `HOST` count as
-"the domain" vs. "the subdomain":
+**About `TLD_LENGTH`**: not needed for either pattern above with a standard
+`yourdomain.com`-style domain - Rails' own default is already correct,
+since both the main app and API hosts are exactly one label under a
+2-label domain either way. Only set it if your domain has a multi-part
+suffix (e.g. `yourdomain.co.uk` needs `TLD_LENGTH=2`).
 
-- Using a **dedicated subdomain** (`npoint.yourdomain.com` /
-  `api.npoint.yourdomain.com`, as set up above) - add this to your `.env`:
-  ```bash
-  TLD_LENGTH=2
-  ```
-- Using your **bare apex domain** (`yourdomain.com` / `api.yourdomain.com`)
-  instead - leave `TLD_LENGTH` unset, the default is already correct.
-- Using a domain with a multi-part suffix (e.g. `yourdomain.co.uk`) - add 1
-  to whichever value above applies.
-
-Getting this wrong doesn't break the main site, only the `api.` subdomain
-(document GET/POST-by-token) - if that stops working after you deploy,
-double check this value first.
+Getting `API_SUBDOMAIN` wrong (or Cloudflare's Public Hostname routes not
+matching it) doesn't break the main site, only the API host (document
+GET/POST-by-token, and the API links n:point generates in its UI) - if
+those stop working after you deploy, double check this value first.
 
 ## 4. Start it
 

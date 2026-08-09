@@ -19,7 +19,13 @@ Rails.application.routes.draw do
     post 'bandwidth/clear' => 'bandwidth#clear'
   end
 
-  constraints :subdomain => 'api' do
+  # API_SUBDOMAIN defaults to 'api' (api.<host>). Override for deployments
+  # where that isn't a valid hostname to route to - e.g. Cloudflare's free
+  # plan only issues a certificate for one level of subdomain, so
+  # api.npoint.yourdomain.com (two levels under yourdomain.com) won't get
+  # HTTPS; api-npoint.yourdomain.com (one level) will. See
+  # docs/cloudflare-tunnel.md.
+  constraints :subdomain => ENV.fetch('API_SUBDOMAIN', 'api') do
     namespace :api, path: nil, defaults: { format: 'json' } do
       match '/:token(/*path)', to: 'documents#show', via: [:get, :options]
       match '/:token(/*path)', to: 'documents#update', via: [:post, :options]

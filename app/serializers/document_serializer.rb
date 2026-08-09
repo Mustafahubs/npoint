@@ -12,7 +12,7 @@ class DocumentSerializer < DocumentIndexSerializer
     :schema
 
   def api_url
-    url_for(controller: 'api/documents', subdomain: 'api', action: 'show', token: object.token)
+    url_for(controller: 'api/documents', subdomain: ENV.fetch('API_SUBDOMAIN', 'api'), action: 'show', token: object.token)
   end
 
   def example_subproperty_url

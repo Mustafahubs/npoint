@@ -11,8 +11,12 @@
 #   SECRET_KEY_BASE         - generate with: docker compose run --rm web bin/rails secret
 #   PUBLIC_PROTOCOL=https
 #   PUBLIC_PORT=443
-#   TLD_LENGTH              - only if HOST is a dedicated subdomain, e.g. 2
-#                             for npoint.yourdomain.com (see the guide)
+#   API_SUBDOMAIN           - only if using a dedicated subdomain for HOST,
+#                             e.g. "api-npoint" when HOST=npoint.yourdomain.com
+#                             (see the guide - Cloudflare's free plan can't
+#                             issue a cert for a two-level subdomain like
+#                             api.npoint.yourdomain.com)
+#   TLD_LENGTH              - only for multi-part-TLD domains (e.g. co.uk)
 services:
   web:
     environment:
@@ -20,6 +24,7 @@ services:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       PUBLIC_PROTOCOL: https
       PUBLIC_PORT: "443"
+      API_SUBDOMAIN: ${API_SUBDOMAIN:-}
       TLD_LENGTH: ${TLD_LENGTH:-}
 
   cloudflared:
