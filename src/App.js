@@ -26,7 +26,7 @@ class App extends Component {
   render() {
     return (
       <div>
-        <Helmet defaultTitle="npoint.io - JSON storage with schema validation" />
+        <Helmet defaultTitle="n:point - JSON storage with schema validation" />
         {this.props.children}
       </div>
     )

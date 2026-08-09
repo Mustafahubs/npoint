@@ -1,14 +1,23 @@
 # n:point
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/demo-npoint.fastapi.us-6BA539?logo=googlechrome&logoColor=white)](https://npoint.fastapi.us/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](#run-it-locally-with-docker)
 [![Rails](https://img.shields.io/badge/rails-8.1-CC0000?logo=rubyonrails&logoColor=white)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.2.4-CC342D?logo=ruby&logoColor=white)](Gemfile)
 [![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-6BA539?logo=openapiinitiative&logoColor=white)](openapi.yaml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-[npoint.io](https://www.npoint.io/) is a lightweight JSON data store for your
-app or prototype.
+n:point is a lightweight JSON data store for your app or prototype.
+Originally created by [Alex Zirbel](https://github.com/azirbel) as
+[npoint.io](https://www.npoint.io/); this is a self-hosted, open-source fork
+maintained by [Mustafahubs](https://github.com/Mustafahubs) — see
+[Copyright & License](#copyright--license) for full attribution.
+
+🚀 **[Try the live demo of this fork](https://npoint.fastapi.us/)** — the
+public API is served from
+[api-npoint.fastapi.us](https://api-npoint.fastapi.us/) (see
+[why it's `api-npoint.` and not `api.npoint.`](docs/cloudflare-tunnel.md)).
 
 Save FAQ answers, customer stories, configuration data, or anything else that
 will fit in a JSON blob. Then access your data directly via API.
@@ -19,10 +28,6 @@ Features like schema validation and locking mean you can make these changes
 confidently, without breaking your app.
 
 ![Demo screenshot](public/img/demo-screenshot-locked.png)
-
-This is a self-hosted, open-source fork maintained by
-[Mustafahubs](https://github.com/Mustafahubs) — see
-[Copyright & License](#copyright--license) for attribution.
 
 ## Table of contents
 
@@ -220,7 +225,7 @@ right ahead — there are a few paths depending on what you're optimizing for:
   1. Set up a hosted Postgres DB in Render, and make sure `DATABASE_URL` points there.
   2. Set up a hosted Redis (or [Valkey](https://valkey.io/)) instance, and make sure `REDIS_URL` points there — required for rate limiting (Rack::Attack).
   3. Configure environment variables. You'll at least need:
-     - `HOST` (e.g. `npoint.io`)
+     - `HOST` (e.g. `yourdomain.com`)
      - `SECRET_KEY_BASE` (generate with `bin/rails secret`)
      - `RAILS_MAX_THREADS`, `RAILS_SERVE_STATIC_FILES=true` (typical Rails production settings)
      - `CLOUDFLARE_API_TOKEN` (optional, for cache purging — a different feature from the [Cloudflare Tunnel](docs/cloudflare-tunnel.md) setup above)

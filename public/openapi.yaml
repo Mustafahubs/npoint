@@ -5,7 +5,11 @@ info:
   description: |
     A JSON document store with a public read/write API for stored documents.
 
-    **n:point** (npoint.io) is a JSON document store. You create a "document" —
+    **n:point** is a JSON document store, originally created by Alex Zirbel
+    as [npoint.io](https://www.npoint.io/). This spec documents the
+    [Mustafahubs/npoint](https://github.com/Mustafahubs/npoint) fork, whose
+    live demo runs at [npoint.fastapi.us](https://npoint.fastapi.us/). You
+    create a "document" —
     a token-addressed bucket of arbitrary JSON (`contents`), optionally
     validated against a JSON Schema (`schema`) — and then read or write it
     back over a plain HTTP API. Documents can be anonymous (editable by
@@ -21,10 +25,13 @@ info:
     2. **Document management** (create/read/update/delete/clone documents,
        plus JSON Schema validate/generate helpers) — main app host, requires
        a browser session for anything user-owned.
-    3. **Public document API** — a *separate host*, the `api.` subdomain
-       (e.g. `api.npoint.io` in production, `api.localhost:3001` locally).
-       This is the actual "consume your data" feature n:point is built
-       around: `GET https://api.npoint.io/<token>` returns the document's
+    3. **Public document API** — a *separate host*, the `api.` subdomain by
+       default (e.g. `api-npoint.fastapi.us` on this fork's live demo,
+       `api.localhost:3001` locally - see `API_SUBDOMAIN` in
+       [docs/cloudflare-tunnel.md](https://github.com/Mustafahubs/npoint/blob/main/docs/cloudflare-tunnel.md)
+       for why it isn't always a plain `api.` prefix). This is the actual
+       "consume your data" feature n:point is built around:
+       `GET https://api-npoint.fastapi.us/<token>` returns the document's
        `contents` directly as the HTTP response body, no envelope, no auth
        needed for public documents.
 
@@ -158,20 +165,28 @@ info:
     url: https://github.com/Mustafahubs/npoint/blob/main/LICENSE
 
 servers:
+  - url: https://npoint.fastapi.us
+    description: >-
+      Main application (this fork's live demo). Account management and
+      document management endpoints — everything NOT tagged "Public API"
+      lives here.
+  - url: https://api-npoint.fastapi.us
+    description: >-
+      Public API (this fork's live demo). Only operations tagged "Public
+      API" live here — direct read/write access to a document's `contents`.
+      Every operation in that group declares this server explicitly via an
+      operation-level `servers` override, since it differs from the default
+      server above. Note this is `api-npoint.` (hyphen), not `api.npoint.` -
+      see the `API_SUBDOMAIN` note in docs/cloudflare-tunnel.md for why.
   - url: http://localhost:3001
     description: >-
-      Main application (local development). Account management and document
-      management endpoints — everything NOT tagged "Public API" lives here.
-      In production this is https://npoint.io (or whatever HOST is
-      configured to).
+      Main application (local development, e.g. via `docker compose up`).
   - url: http://api.localhost:3001
     description: >-
-      Public API subdomain (local development). Only operations tagged
-      "Public API" live here — direct read/write access to a document's
-      `contents`. In production this is https://api.npoint.io (or
-      `api.` + whatever HOST is configured to). Every operation in this
-      group declares this server explicitly via an operation-level
-      `servers` override, since it differs from the default server above.
+      Public API (local development). Local dev uses the plain `api.`
+      subdomain by default (only self-hosted deployments on a domain with
+      Cloudflare's free-plan certificate limits need `API_SUBDOMAIN` set to
+      something else, as the live demo above does).
 
 tags:
   - name: Authentication
@@ -919,11 +934,13 @@ paths:
         People occasionally land on the bare `api.` subdomain looking for
         the main site; this points them in the right direction.
 
-        **Server**: `api.` subdomain (see the `servers` override below) —
-        this is `GET /` on `api.npoint.io`, not the main app's root.
+        **Server**: API subdomain (see the `servers` override below) — this
+        is `GET /` on `api-npoint.fastapi.us`, not the main app's root.
       servers:
+        - url: https://api-npoint.fastapi.us
+          description: Public API (this fork's live demo).
         - url: http://api.localhost:3001
-          description: Public API subdomain.
+          description: Public API (local development).
       responses:
         '200':
           description: Basic info about the API.
@@ -951,13 +968,15 @@ paths:
         scalar is still rendered as valid JSON text (e.g. a stored string
         `"abc"` is returned as the 5-byte body `"abc"`, quotes included).
 
-        **Server**: `api.` subdomain — this is `GET /{token}` on
-        `api.npoint.io`, distinct from the main app's
+        **Server**: API subdomain — this is `GET /{token}` on
+        `api-npoint.fastapi.us`, distinct from the main app's
         `GET /documents/{token}` (which returns the full record envelope,
         not just `contents`).
       servers:
+        - url: https://api-npoint.fastapi.us
+          description: Public API (this fork's live demo).
         - url: http://api.localhost:3001
-          description: Public API subdomain.
+          description: Public API (local development).
       responses:
         '200':
           description: The document's raw `contents`.
@@ -1005,11 +1024,13 @@ paths:
         Correct token but the owning account isn't premium → `402`. Correct
         token and premium → `200`.
 
-        **Server**: `api.` subdomain — this is `POST /{token}` on
-        `api.npoint.io`.
+        **Server**: API subdomain — this is `POST /{token}` on
+        `api-npoint.fastapi.us`.
       servers:
+        - url: https://api-npoint.fastapi.us
+          description: Public API (this fork's live demo).
         - url: http://api.localhost:3001
-          description: Public API subdomain.
+          description: Public API (local development).
       security:
         - {}
         - apiBearerToken: []
@@ -1077,8 +1098,10 @@ paths:
 
         **Server**: `api.` subdomain.
       servers:
+        - url: https://api-npoint.fastapi.us
+          description: Public API (this fork's live demo).
         - url: http://api.localhost:3001
-          description: Public API subdomain.
+          description: Public API (local development).
       responses:
         '200':
           description: The resolved sub-value.
@@ -1109,8 +1132,10 @@ paths:
 
         **Server**: `api.` subdomain.
       servers:
+        - url: https://api-npoint.fastapi.us
+          description: Public API (this fork's live demo).
         - url: http://api.localhost:3001
-          description: Public API subdomain.
+          description: Public API (local development).
       responses:
         '404':
           description: Always. Path-suffixed updates are not supported. Empty body.

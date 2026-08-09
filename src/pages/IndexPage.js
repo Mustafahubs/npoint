@@ -1,15 +1,9 @@
-/* global axios */
-
 import React, { Component } from 'react'
-import ReactMarkdown from 'react-markdown'
-import { MdDone, MdStarOutline } from 'react-icons/lib/md'
-import _ from 'lodash'
 
 import Button from '../components/Button'
 import JsonEditor from '../components/JsonEditor'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
-import PageLoadingPlaceholder from '../components/PageLoadingPlaceholder'
 import createNewDocument from '../helpers/createNewDocument'
 
 import {} from './IndexPage.css'
@@ -24,18 +18,6 @@ export default class IndexPage extends Component {
       null,
       2
     ),
-    features: [],
-    premiumFeatures: [],
-  }
-
-  componentDidMount() {
-    axios.get('https://api.npoint.io/features').then(({ data }) => {
-      this.setState({ features: data })
-    })
-
-    axios.get('https://api.npoint.io/premium-features').then(({ data }) => {
-      this.setState({ premiumFeatures: data })
-    })
   }
 
   render() {
@@ -209,39 +191,6 @@ export default class IndexPage extends Component {
           </div>
         </div>
 
-        <div className="section">
-          <div className="container">
-            <div className="prose">
-              <h2>Features</h2>
-              <p className="text-italic">
-                This list is built on n:point!
-                <br />
-                Check it out at{' '}
-                <a target="_blank" href="https://www.npoint.io/docs/features">
-                  npoint.io/docs/features
-                </a>
-                , or via the API at{' '}
-                <a target="_blank" href="https://api.npoint.io/features">
-                  api.npoint.io/features
-                </a>
-                .
-              </p>
-            </div>
-            <ul>
-              {_.isEmpty(this.state.features) && <PageLoadingPlaceholder />}
-              {this.state.features.map(feature => (
-                <li key={feature.slug} className="feature">
-                  <MdDone className="feature-icon" />
-                  <div>
-                    <h3>{feature.title}</h3>
-                    <ReactMarkdown source={feature.description} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
         <div className="section dark-white">
           <div className="container">
             <div className="prose">
@@ -297,6 +246,82 @@ export default class IndexPage extends Component {
                 title="GitHub"
               />
             </div>
+          </div>
+        </div>
+
+        <div className="section">
+          <div className="container">
+            <div className="prose">
+              <h2>What's different in this fork?</h2>
+              <p>
+                This is an open-source fork of the original{' '}
+                <a target="_blank" href="https://github.com/azirbel/npoint">
+                  azirbel/npoint
+                </a>{' '}
+                by{' '}
+                <a target="_blank" href="https://github.com/azirbel">
+                  Alex Zirbel
+                </a>{' '}
+                — all credit for the original design and concept goes to
+                him. This fork focuses on making n:point easy to self-host
+                and building out its API for other developers.
+              </p>
+            </div>
+            <table className="comparison-table">
+              <thead>
+                <tr>
+                  <th>Area</th>
+                  <th>
+                    <a target="_blank" href="https://github.com/azirbel/npoint">
+                      Original (azirbel/npoint)
+                    </a>
+                  </th>
+                  <th>
+                    <a target="_blank" href="https://github.com/Mustafahubs/npoint">
+                      This fork (Mustafahubs/npoint)
+                    </a>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Local setup</td>
+                  <td>Manual Ruby/Node/Postgres/Redis install</td>
+                  <td>One command: <code>docker compose up --build</code></td>
+                </tr>
+                <tr>
+                  <td>Exposing it online</td>
+                  <td>Render.com deployment only</td>
+                  <td>
+                    Also supports a Cloudflare Tunnel straight from the
+                    Docker setup — no port-forwarding or static IP needed
+                  </td>
+                </tr>
+                <tr>
+                  <td>API docs</td>
+                  <td>None published</td>
+                  <td>
+                    Full <a href="/api-docs">OpenAPI 3.0 reference</a>,
+                    browsable and downloadable
+                  </td>
+                </tr>
+                <tr>
+                  <td>Account &amp; document bugs</td>
+                  <td>
+                    Several correctness/security issues found during an
+                    audit of this fork (signup could silently fail, deleted
+                    accounts could crash, locked documents could get stuck
+                    forever, and more)
+                  </td>
+                  <td>Fixed, with regression coverage</td>
+                </tr>
+                <tr>
+                  <td>Analytics &amp; chat widgets</td>
+                  <td>Google Analytics + Crisp chat, tied to the original maintainer's accounts</td>
+                  <td>Removed</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 

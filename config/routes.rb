@@ -35,10 +35,8 @@ Rails.application.routes.draw do
 
   root 'app#index'
   get 'account', to: 'app#index'
-  get 'changelog', to: 'app#index'
   get 'docs', to: 'app#index'
   get 'docs/:id', to: 'app#index'
-  get 'faq', to: 'app#index'
   get 'reset-password', to: 'app#index'
 
   resources :documents, param: :token, only: [:index, :create, :show, :update, :destroy] do
