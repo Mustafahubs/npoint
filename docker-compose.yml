@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - npoint_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Redis-protocol store used for rate limiting (Rack::Attack) and bandwidth
+  # tracking. Production uses Valkey; plain Redis is a drop-in for local use.
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - npoint_redisdata:/data
+
+  web:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      # Read by config/database.yml (host) and libpq/the pg gem directly
+      # (user/password, which database.yml's development block leaves unset).
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      REDIS_URL: redis://redis:6379/0
+      HOST: localhost
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  npoint_pgdata:
+  npoint_redisdata:

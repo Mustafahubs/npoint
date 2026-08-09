@@ -12,6 +12,26 @@ confidently, without breaking your app.
 
 ![Demo screenshot](public/img/demo-screenshot-locked.png)
 
+## Run it locally with Docker
+
+The fastest way to get n:point running on your own machine — no Ruby, Node,
+Postgres, or Redis installation required.
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose).
+2. Clone the repo and start it up:
+
+   ```bash
+   git clone https://github.com/azirbel/npoint.git
+   cd npoint
+   docker compose up --build
+   ```
+
+3. Open [http://localhost:3001](http://localhost:3001).
+
+The first run builds the frontend, installs gems, and sets up the database
+for you. Your data persists in a Docker volume between runs; use
+`docker compose down -v` if you want to wipe it and start fresh.
+
 ## Contributing
 
 Contributions are welcome!
@@ -124,8 +144,12 @@ Tracking runs in-memory and automatically cleans up data older than 24 hours.
 
 Want to run your own instance of n:point? Go right ahead!
 
-I'd recommend setting it up on [render.com](https://render.com/), which is what
-I use for [npoint.io](https://www.npoint.io).
+For local use, see [Run it locally with Docker](#run-it-locally-with-docker)
+above — `Dockerfile` and `docker-compose.yml` are a good starting point for
+deploying to any other container host, too.
+
+For a real deployment, I'd recommend [render.com](https://render.com/), which
+is what I use for [npoint.io](https://www.npoint.io).
 
 1. Set up a hosted Potsgres DB in render, and make sure `DATABASE_URL` points there
 2. Configure environment variables. You'll at least need:

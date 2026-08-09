@@ -1,0 +1,4 @@
+# Shell/executable scripts must keep LF endings so they still run inside
+# Linux Docker containers when checked out on Windows (core.autocrlf=true).
+*.sh text eol=lf
+bin/* text eol=lf
