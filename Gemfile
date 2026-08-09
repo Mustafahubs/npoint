@@ -20,7 +20,6 @@ gem 'rails', '>= 8.1.1'
 gem 'redis'
 gem 'scout_apm'
 gem 'sendgrid-ruby'
-gem 'sentry-raven'
 gem 'turbolinks'
 gem 'uglifier', '>= 1.3.0'
 

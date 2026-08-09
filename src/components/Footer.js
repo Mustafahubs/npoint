@@ -18,14 +18,14 @@ export default class Footer extends Component {
       <footer className="footer">
         <div className={sectionClassName}>
           <div className="container hidden-sm-up text-center">
-            <div className="footer-line-xs">n:point &copy; 2018</div>
+            <div className="footer-line-xs">n:point &copy; 2018&ndash;2026</div>
             <div className="footer-line-xs">
-              Made by{' '}
-              <a target="_blank" href="https://twitter.com/alexzirbel">
-                Alex Zirbel
+              Maintained by{' '}
+              <a target="_blank" href="https://github.com/Mustafahubs">
+                Mustafahubs
               </a>{' '}
               · Code on{' '}
-              <a target="_blank" href="https://github.com/azirbel/npoint">
+              <a target="_blank" href="https://github.com/Mustafahubs/npoint">
                 GitHub
               </a>
             </div>
@@ -35,7 +35,7 @@ export default class Footer extends Component {
             </div>
             <div className="footer-line-xs">
               More questions?{' '}
-              <a href="mailto:support@npoint.io">support@npoint.io</a>
+              <a href="mailto:sgocean25@gmail.com">sgocean25@gmail.com</a>
             </div>
           </div>
           <div className="container hidden-xs-down">

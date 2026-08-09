@@ -1,7 +1,13 @@
 class SchemaController < ApplicationController
+  # Rails' ParamsWrapper nests a copy of the body under a `schema` key
+  # (inferred from this controller's name) even when the client doesn't send
+  # one, which would otherwise mask a genuinely-missing `schema` param.
+  wrap_parameters false
+
   def validate
-    contents = JSON.parse(params.require(:contents))
-    schema = JSON.parse(params.require(:schema))
+    contents = parse_required_json(:contents)
+    schema = parse_required_json(:schema)
+    return if performed? # a parse failure already rendered a response
 
     errors = JSON::Validator.fully_validate(schema, contents)
     render json: {
@@ -11,7 +17,8 @@ class SchemaController < ApplicationController
   end
 
   def generate
-    contents = JSON.parse(params.require(:contents))
+    contents = parse_required_json(:contents)
+    return if performed?
 
     schema = JSON.parse(
       JSON::SchemaGenerator.generate(
@@ -32,6 +39,15 @@ class SchemaController < ApplicationController
   end
 
   private
+
+  # Renders a 400 and returns nil if `param` isn't present or isn't valid
+  # JSON; callers must check `performed?` before using the result.
+  def parse_required_json(param)
+    JSON.parse(params.require(param))
+  rescue JSON::ParserError, TypeError
+    head :bad_request
+    nil
+  end
 
   def improve_readability(error_message)
     msg = error_message

@@ -9,6 +9,8 @@ class ApplicationController < ActionController::Base
   rescue_from Exception, with: :internal_server_error
   rescue_from ActiveRecord::RecordNotFound, with: :not_found
   rescue_from ActionController::ParameterMissing, with: :missing_param
+  rescue_from ActionController::InvalidAuthenticityToken, with: :invalid_authenticity_token
+  rescue_from ActionDispatch::Http::Parameters::ParseError, with: :bad_request_body
 
   protected
 
@@ -25,6 +27,14 @@ class ApplicationController < ActionController::Base
   end
 
   def missing_param
+    head :bad_request
+  end
+
+  def invalid_authenticity_token
+    head :unprocessable_entity
+  end
+
+  def bad_request_body
     head :bad_request
   end
 end

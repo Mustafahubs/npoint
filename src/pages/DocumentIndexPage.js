@@ -46,6 +46,10 @@ class DocumentIndexPage extends Component {
   }
 
   deleteDocument(doc) {
+    if (!window.confirm(`Delete "${doc.title}"? This cannot be undone.`)) {
+      return
+    }
+
     Document.delete(doc.token).then(() => {
       this.setState({ documents: _.without(this.state.documents, doc) })
     })

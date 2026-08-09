@@ -1,27 +1,51 @@
-# n:point [![CircleCI](https://circleci.com/gh/azirbel/npoint/tree/main.svg?style=svg)](https://circleci.com/gh/azirbel/npoint/tree/main)
+# n:point
 
-[npoint.io](https://www.npoint.io/) is a lightweight data store for your app or prototype.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](#run-it-locally-with-docker)
+[![Rails](https://img.shields.io/badge/rails-8.1-CC0000?logo=rubyonrails&logoColor=white)](Gemfile)
+[![Ruby](https://img.shields.io/badge/ruby-3.2.4-CC342D?logo=ruby&logoColor=white)](Gemfile)
+[![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-6BA539?logo=openapiinitiative&logoColor=white)](openapi.yaml)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-Save FAQ answers, customer stories, configuration data, or	anything else that
-will fit in a JSON blob. Then access your data	directly via API.
+[npoint.io](https://www.npoint.io/) is a lightweight JSON data store for your
+app or prototype.
 
-Once your app is live, come back later to edit your saved JSON	without having
-to redeploy. Or share a login with a	friend so they can help you experiment!
+Save FAQ answers, customer stories, configuration data, or anything else that
+will fit in a JSON blob. Then access your data directly via API.
+
+Once your app is live, come back later to edit your saved JSON without having
+to redeploy. Or share a login with a friend so they can help you experiment!
 Features like schema validation and locking mean you can make these changes
 confidently, without breaking your app.
 
 ![Demo screenshot](public/img/demo-screenshot-locked.png)
 
+This is a self-hosted, open-source fork maintained by
+[Mustafahubs](https://github.com/Mustafahubs) — see
+[Copyright & License](#copyright--license) for attribution.
+
+## Table of contents
+
+- [Run it locally with Docker](#run-it-locally-with-docker)
+- [Expose it over the internet](#expose-it-over-the-internet)
+- [API documentation](#api-documentation)
+- [Contributing](#contributing)
+- [Development](#development)
+- [Maintaining](#maintaining)
+- [Self-hosting elsewhere](#self-hosting-elsewhere)
+- [Similar tools](#similar-tools)
+- [Copyright & license](#copyright--license)
+
 ## Run it locally with Docker
 
-The fastest way to get n:point running on your own machine — no Ruby, Node,
-Postgres, or Redis installation required.
+🐳 The fastest way to get n:point running on your own machine — no Ruby,
+Node, Postgres, or Redis installation required.
 
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose).
 2. Clone the repo and start it up:
 
    ```bash
-   git clone https://github.com/azirbel/npoint.git
+   git clone https://github.com/Mustafahubs/npoint.git
    cd npoint
    docker compose up --build
    ```
@@ -32,6 +56,40 @@ The first run builds the frontend, installs gems, and sets up the database
 for you. Your data persists in a Docker volume between runs; use
 `docker compose down -v` if you want to wipe it and start fresh.
 
+If port `3001` is already in use on your machine, change the host side of
+the port mapping in `docker-compose.yml` (e.g. `"8080:3001"`) and also
+uncomment/set `PUBLIC_PORT` in the `web` service's environment to match —
+otherwise links the app generates (like a document's public API URL) will
+point at the wrong port. See the comments in `docker-compose.yml`.
+
+## Expose it over the internet
+
+🌐 Already have a domain on Cloudflare? You can make your local Docker
+deployment reachable from the internet on a subdomain — no port-forwarding,
+static IP, or extra server required — using a
+[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
+
+See **[docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md)** for the full,
+step-by-step guide, including the Cloudflare dashboard setup and the
+`docker-compose.tunnel.yml` overlay that runs alongside your existing local
+setup.
+
+## API documentation
+
+📖 n:point's HTTP API (account management, document CRUD, schema
+validation, and the public `api.<host>` document-access API) is fully
+documented as an [OpenAPI 3.0](https://www.openapis.org/) spec.
+
+Once your instance is running (locally or over a tunnel), open
+**`/api-docs`** in a browser for interactive, browsable documentation
+(rendered with [Redoc](https://github.com/Redocly/redoc)) — for example
+[http://localhost:3001/api-docs](http://localhost:3001/api-docs) for a local
+Docker setup. The raw spec is served alongside it at `/openapi.yaml`
+(source: [`openapi.yaml`](openapi.yaml)), so you can also load it into tools
+like [Swagger UI](https://swagger.io/tools/swagger-ui/),
+[Postman](https://www.postman.com/), or generate an API client with
+[OpenAPI Generator](https://openapi-generator.tech/).
+
 ## Contributing
 
 Contributions are welcome!
@@ -40,6 +98,10 @@ Please open an issue to discuss proposed changes, rather than opening a pull
 request directly.
 
 ## Development
+
+If you want to run the app natively (not in Docker) to work on it — for
+just using n:point, the [Docker setup](#run-it-locally-with-docker) above is
+much simpler and is what most people should use.
 
 #### Setup
 
@@ -127,8 +189,9 @@ curl -u $ADMIN_USERNAME:$ADMIN_PASSWORD -X POST http://localhost:3001/admin/band
 ```
 
 Tracking runs in-memory and automatically cleans up data older than 24 hours.
+This endpoint is disabled (returns `503`) unless both env vars above are set.
 
-## Similar Tools
+## Similar tools
 
 * [JSONbin.io](https://jsonbin.io/)
 * [Firebase](https://firebase.google.com/)
@@ -140,44 +203,59 @@ Tracking runs in-memory and automatically cleans up data older than 24 hours.
 * [JSON Schema](http://json-schema.org/)
 * [JSON in Postgres](https://blog.codeship.com/unleash-the-power-of-storing-json-in-postgres/)
 
-## Self-hosting
+## Self-hosting elsewhere
 
-Want to run your own instance of n:point? Go right ahead!
+Want to run your own instance of n:point somewhere other than Docker? Go
+right ahead — there are a few paths depending on what you're optimizing for:
 
-For local use, see [Run it locally with Docker](#run-it-locally-with-docker)
-above — `Dockerfile` and `docker-compose.yml` are a good starting point for
-deploying to any other container host, too.
+- **Local use, or exposed via a tunnel**: see
+  [Run it locally with Docker](#run-it-locally-with-docker) and
+  [Expose it over the internet](#expose-it-over-the-internet) above.
+  `Dockerfile` and `docker-compose.yml` are also a good starting point for
+  deploying to any other container host (Fly.io, Railway, a VPS with Docker,
+  etc).
+- **A traditional PaaS deployment**: [render.com](https://render.com/) is
+  what the original project uses for [npoint.io](https://www.npoint.io).
 
-For a real deployment, I'd recommend [render.com](https://render.com/), which
-is what I use for [npoint.io](https://www.npoint.io).
+  1. Set up a hosted Postgres DB in Render, and make sure `DATABASE_URL` points there.
+  2. Set up a hosted Redis (or [Valkey](https://valkey.io/)) instance, and make sure `REDIS_URL` points there — required for rate limiting (Rack::Attack).
+  3. Configure environment variables. You'll at least need:
+     - `HOST` (e.g. `npoint.io`)
+     - `SECRET_KEY_BASE` (generate with `bin/rails secret`)
+     - `RAILS_MAX_THREADS`, `RAILS_SERVE_STATIC_FILES=true` (typical Rails production settings)
+     - `CLOUDFLARE_API_TOKEN` (optional, for cache purging — a different feature from the [Cloudflare Tunnel](docs/cloudflare-tunnel.md) setup above)
+     - `CLOUDFLARE_ZONE_ID` (optional, for cache purging)
+  4. Use these Render settings:
 
-1. Set up a hosted Potsgres DB in render, and make sure `DATABASE_URL` points there
-2. Configure environment variables. You'll at least need:
-   - `HOST` (e.g. `npoint.io`)
-   - `CLOUDFLARE_API_TOKEN` (optional, for cache purging)
-   - `CLOUDFLARE_ZONE_ID` (optional, for cache purging)
-3. Use these render settings:
+     ```
+     # build command
+     ./build.sh
 
-```
-# build command
-./build.sh
+     # start command
+     ./start.sh
+     ```
 
-# start command
-./start.sh
-```
-
-The one piece of the app that won't work is password-reset emails, which go
-through a Sendgrid account. I recommend deleting the code for this and handling
-it yourself.
+  Password-reset emails go through a [SendGrid](https://sendgrid.com/)
+  account (`SENDGRID_API_KEY`) using a dynamic email template ID that lives
+  in the original maintainer's SendGrid account — you'll need to create your
+  own template and swap in its ID (see the comment in
+  `app/lib/transactional_mail.rb`), or remove the feature and handle
+  password resets yourself.
 
 ## Codebase TODOs / Wishlist
 
-* Add sentry or similar error collection service (search: `TODO(sentry)`)
-* Self-host and use privacy-respecting analytics (search: `TODO(self-host)`)
+* Add a real error-tracking service — this fork removed `sentry-raven`
+  (search history for why: it was unconfigured, deprecated, and was
+  actually swallowing/misrouting unhandled exceptions app-wide). Nothing
+  has replaced it yet.
+* This fork's Docker image no longer ships Google Analytics or the Crisp
+  chat widget (they pointed at the original maintainer's accounts); a
+  privacy-respecting, self-hostable replacement (e.g.
+  [Plausible](https://plausible.io/) or [Umami](https://umami.is/)) hasn't
+  been added.
 * More testing (search: `TODO(test)`)
 
-## Copyright & License
+## Copyright & license
 
-Copyright (c) 2017-2018 Alexander Zirbel - Code released under the [MIT
-license](LICENSE).<br/>n:point and the n:point logo are the property of
-Alexander Zirbel.
+Copyright (c) 2017-2018 Alexander Zirbel, copyright (c) 2026 Mustafahubs
+(this fork) - Code released under the [MIT license](LICENSE).

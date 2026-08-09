@@ -9,12 +9,15 @@ class TransactionalMail
     reset_url = "#{url_for(controller: 'app', subdomain: 'www', port: port)}reset-password?token=#{token}"
 
     mail = SendGrid::Mail.new
-    mail.from = SendGrid::Email.new(email: 'n:point <support@npoint.io>')
+    mail.from = SendGrid::Email.new(email: 'n:point <sgocean25@gmail.com>')
     personalization = SendGrid::Personalization.new
     personalization.add_to(SendGrid::Email.new(email: user.email))
     personalization.add_substitution(SendGrid::Substitution.new(key: '%name%', value: user.name))
     personalization.add_substitution(SendGrid::Substitution.new(key: '%reset_url%', value: reset_url))
     mail.add_personalization(personalization)
+    # This template ID lives in the original maintainer's SendGrid account.
+    # Forks need their own SendGrid dynamic template and ID here before
+    # password-reset emails will actually send.
     mail.template_id = 'bdf0a64b-087d-4c5f-a955-fb6589d3422a'
 
     sg = SendGrid::API.new(api_key: ENV['SENDGRID_API_KEY'])

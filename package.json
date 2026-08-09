@@ -2,6 +2,14 @@
   "name": "npoint",
   "version": "0.1.0",
   "private": true,
+  "description": "n:point is a lightweight JSON data store with schema validation, accessible via API.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mustafahubs/npoint.git"
+  },
+  "homepage": "https://github.com/Mustafahubs/npoint",
+  "author": "Mustafahubs <sgocean25@gmail.com>",
+  "license": "MIT",
   "proxy": "http://localhost:3001",
   "engines" : { 
     "node" : "14.17.0"

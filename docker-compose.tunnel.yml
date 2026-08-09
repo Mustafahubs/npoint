@@ -1,0 +1,30 @@
+# Overlay for exposing the local Docker deployment to the internet via a
+# Cloudflare Tunnel, on top of the base docker-compose.yml. See
+# docs/cloudflare-tunnel.md for the full setup guide.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --build
+#
+# Requires a .env file (or exported shell variables) providing:
+#   CLOUDFLARE_TUNNEL_TOKEN - from your tunnel in the Cloudflare Zero Trust dashboard
+#   HOST                    - the public hostname you routed the tunnel to
+#   SECRET_KEY_BASE         - generate with: docker compose run --rm web bin/rails secret
+#   PUBLIC_PROTOCOL=https
+#   PUBLIC_PORT=443
+#   TLD_LENGTH              - only if HOST is a dedicated subdomain, e.g. 2
+#                             for npoint.yourdomain.com (see the guide)
+services:
+  web:
+    environment:
+      HOST: ${HOST}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      PUBLIC_PROTOCOL: https
+      PUBLIC_PORT: "443"
+      TLD_LENGTH: ${TLD_LENGTH:-}
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - web

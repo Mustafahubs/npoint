@@ -1,12 +1,15 @@
 class ResetPasswordController < ApplicationController
   def send_reset_password_email
-    user = User.find_by!(email: params.require(:email))
-    token = set_reset_password_token(user)
-    email_sent = TransactionalMail.reset_password(user, token)
-    if email_sent
-      head :ok
+    user = User.find_by(email: params.require(:email))
+
+    if user
+      token = set_reset_password_token(user)
+      email_sent = TransactionalMail.reset_password(user, token)
+      head email_sent ? :ok : :service_unavailable
     else
-      head :service_unavailable
+      # Same response as the success case, regardless of whether the email
+      # is registered - a 404 here would let an attacker enumerate accounts.
+      head :ok
     end
   end
 

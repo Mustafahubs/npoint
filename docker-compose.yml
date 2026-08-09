@@ -31,6 +31,10 @@ services:
       PGPASSWORD: postgres
       REDIS_URL: redis://redis:6379/0
       HOST: localhost
+      # Only needed if you change the host-side port below (e.g. "8080:3001")
+      # - set it to that host port so generated URLs (api_url, etc.) are
+      # correct. Left unset here since it defaults to matching PORT.
+      # PUBLIC_PORT: "8080"
     depends_on:
       db:
         condition: service_healthy

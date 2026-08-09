@@ -30,6 +30,7 @@ const INITIAL_STATE = {
   contentsErrorMessage: '',
   document: {},
   isLoading: false,
+  loadError: false,
   isSaving: false,
   lockdownContentsModalVisible: false,
   lockdownSchemaModalVisible: false,
@@ -52,8 +53,10 @@ class DocumentPage extends Component {
   state = INITIAL_STATE
 
   loadDocument(token) {
-    this.setState({ isLoading: true })
-    Document.get(token).then(({ data }) => this.onLoadDocument(data))
+    this.setState({ isLoading: true, loadError: false })
+    Document.get(token)
+      .then(({ data }) => this.onLoadDocument(data))
+      .catch(() => this.setState({ isLoading: false, loadError: true }))
   }
 
   loadCachedThinDocument(token) {
@@ -426,7 +429,23 @@ class DocumentPage extends Component {
           title={this.state.document.title}
           titleEditable={this.titleEditable}
         />
-        {this.state.isLoading ? <PageLoadingPlaceholder /> : this.renderMain()}
+        {this.state.isLoading
+          ? <PageLoadingPlaceholder />
+          : this.state.loadError
+            ? this.renderLoadError()
+            : this.renderMain()}
+      </div>
+    )
+  }
+
+  renderLoadError() {
+    return (
+      <div className="main-container">
+        <div className="banner dark-gray">
+          <div className="container flex align-center justify-center">
+            This bin doesn&rsquo;t exist, or may have been deleted.
+          </div>
+        </div>
       </div>
     )
   }

@@ -45,12 +45,49 @@ Rails.application.configure do
   config.file_watcher = ActiveSupport::EventedFileUpdateChecker
 
   # https://github.com/rspec/rspec-rails/issues/1275
-  config.action_controller.default_url_options= { host: ENV['HOST'] || 'localhost', port: 3001 }
+  #
+  # HOST/PUBLIC_PORT/PUBLIC_PROTOCOL drive every URL this app generates
+  # (api_url, sample_update_url, password-reset links, etc - these use
+  # Rails.application.routes.url_helpers directly, not the current request,
+  # so they can't infer any of this on their own). They default to sensible
+  # values for a bare local `docker compose up` (see docker-compose.yml) but
+  # should be set to your real public hostname/port/scheme when exposing
+  # this over the internet, e.g. via a Cloudflare Tunnel - see
+  # docs/cloudflare-tunnel.md. PUBLIC_PORT/PUBLIC_PROTOCOL are separate from
+  # PORT (what Puma actually binds to inside the container) because a
+  # reverse proxy/tunnel/Docker port mapping can put a different port and
+  # protocol in front of that.
+  public_host = ENV['HOST'] || 'localhost'
+  public_port = ENV.fetch('PUBLIC_PORT', ENV.fetch('PORT', 3001)).to_i
+  public_protocol = ENV.fetch('PUBLIC_PROTOCOL', 'http')
 
-  # Allow api.localhost subdomain routing
-  config.action_dispatch.tld_length = 0
+  config.action_controller.default_url_options = {
+    host: public_host,
+    port: public_port,
+    protocol: public_protocol,
+  }
+
+  # Subdomain routing (used for the api.<host> public API) needs to know how
+  # many trailing host segments form the "domain" vs. the subdomain.
+  # localhost has no real TLD, so 0. A real domain like yourdomain.com is
+  # correctly handled by Rails' own default of 1 - no override needed.
+  # Set TLD_LENGTH explicitly if your domain needs something else (e.g. a
+  # co.uk-style domain needs 2).
+  config.action_dispatch.tld_length =
+    ENV.fetch('TLD_LENGTH', public_host == 'localhost' ? 0 : 1).to_i
+
+  # Rails' Host Authorization middleware only allows .localhost/.test/IP
+  # hosts by default in development - a real domain (e.g. behind a
+  # Cloudflare Tunnel) would otherwise get a 403 Blocked Host error. Allow
+  # HOST itself and its subdomains (so both the main app and the api.<HOST>
+  # public API work) whenever HOST is set to something other than localhost.
+  if public_host != 'localhost'
+    config.hosts << public_host
+    config.hosts << ".#{public_host}"
+  end
 end
 
 # https://github.com/rspec/rspec-rails/issues/1275
 Rails.application.routes.default_url_options[:host] = ENV['HOST'] || 'localhost'
-Rails.application.routes.default_url_options[:port] = 3001
+Rails.application.routes.default_url_options[:port] = ENV.fetch('PUBLIC_PORT', ENV.fetch('PORT', 3001)).to_i
+Rails.application.routes.default_url_options[:protocol] = ENV.fetch('PUBLIC_PROTOCOL', 'http')

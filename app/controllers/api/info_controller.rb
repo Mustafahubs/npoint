@@ -7,8 +7,8 @@ class Api::InfoController < ApplicationController
   # the right direction. Could put API version info here.
   def index
     render json: {
-      homepage: "https://www.npoint.io",
-      contact: "support@npoint.io"
+      homepage: "https://#{ENV.fetch('HOST', 'localhost')}",
+      contact: "sgocean25@gmail.com"
     }
   end
 end

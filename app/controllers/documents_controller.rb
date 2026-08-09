@@ -2,7 +2,7 @@ class DocumentsController < ApplicationController
   SERIALIZER = DocumentSerializer
 
   before_action :authenticate_user!, :only => [:index]
-  before_action :check_document_edit_rights!, :only => [:update, :destroy]
+  before_action :check_document_edit_rights!, :only => [:update, :destroy, :clone]
 
   def index
     render json: current_user.documents.order(:title, :created_at), each_serializer: DocumentIndexSerializer
@@ -25,7 +25,7 @@ class DocumentsController < ApplicationController
     @document.title = random_title unless @document.title
 
     @document.save!
-    render json: @document, serializer: SERIALIZER
+    render json: @document, serializer: SERIALIZER, status: :created
   rescue ActiveRecord::RecordInvalid
     # TODO(test)
     head :bad_request
@@ -83,17 +83,23 @@ class DocumentsController < ApplicationController
   end
 
   def update_params
-    p = params.permit(:title)
+    # :contents_locked/:schema_locked are always permitted so a document can
+    # be unlocked again - only the actual content fields stay gated behind
+    # the current lock state. Otherwise, once locked, there was no way to
+    # ever send contents_locked: false and have it take effect, which also
+    # made a locked document permanently undeletable (destroy refuses while
+    # locked).
+    p = params.permit(:title, :contents_locked, :schema_locked)
 
     unless document.contents_locked
-      p = p.merge(params.permit(:original_contents, :contents_locked))
+      p = p.merge(params.permit(:original_contents))
 
       if params.key?(:contents)
         p = p.merge(contents: fetch_json_or_nil(:contents))
       end
 
       unless document.schema_locked
-        p = p.merge(params.permit(:original_schema, :schema_locked))
+        p = p.merge(params.permit(:original_schema))
 
         if params.key?(:schema)
           p = p.merge(schema: fetch_json_or_nil(:schema))

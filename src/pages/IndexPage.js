@@ -272,14 +272,14 @@ export default class IndexPage extends Component {
                 be a full backend for your app.
               </p>
               <p>
-                Contact <a href="mailto:support@npoint.io">support@npoint.io</a>{' '}
+                Contact <a href="mailto:sgocean25@gmail.com">sgocean25@gmail.com</a>{' '}
                 if you have any questions!
               </p>
 
               <h3 style={{ marginTop: 40 }}>Open source</h3>
               <p>
                 n:point is completely open source and hosted on{' '}
-                <a target="_blank" href="https://github.com/azirbel/npoint">
+                <a target="_blank" href="https://github.com/Mustafahubs/npoint">
                   Github
                 </a>
                 .
@@ -289,7 +289,7 @@ export default class IndexPage extends Component {
                 you want to self-host your own instance.
               </p>
               <iframe
-                src="https://ghbtns.com/github-btn.html?user=azirbel&repo=npoint&type=star&count=true&size=large"
+                src="https://ghbtns.com/github-btn.html?user=Mustafahubs&repo=npoint&type=star&count=true&size=large"
                 frameborder="0"
                 scrolling="0"
                 width="170"

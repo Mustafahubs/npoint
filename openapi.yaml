@@ -1,0 +1,1644 @@
+openapi: 3.0.3
+info:
+  title: n:point API
+  version: "1.0.0"
+  description: |
+    A JSON document store with a public read/write API for stored documents.
+
+    **n:point** (npoint.io) is a JSON document store. You create a "document" —
+    a token-addressed bucket of arbitrary JSON (`contents`), optionally
+    validated against a JSON Schema (`schema`) — and then read or write it
+    back over a plain HTTP API. Documents can be anonymous (editable by
+    anyone with the token/URL) or owned by a signed-in user (editable only by
+    that user).
+
+    This spec covers three logically distinct groups of endpoints, all
+    implemented by the same Rails application but reachable at different
+    hosts/paths:
+
+    1. **Account management** (Devise-backed: sign up, sign in/out, password
+       reset, profile) — main app host.
+    2. **Document management** (create/read/update/delete/clone documents,
+       plus JSON Schema validate/generate helpers) — main app host, requires
+       a browser session for anything user-owned.
+    3. **Public document API** — a *separate host*, the `api.` subdomain
+       (e.g. `api.npoint.io` in production, `api.localhost:3001` locally).
+       This is the actual "consume your data" feature n:point is built
+       around: `GET https://api.npoint.io/<token>` returns the document's
+       `contents` directly as the HTTP response body, no envelope, no auth
+       needed for public documents.
+
+    ### Servers and the subdomain split
+
+    OpenAPI doesn't have first-class support for "this operation lives on a
+    different subdomain than that one," so this spec uses the mechanism it
+    *does* have: per-operation `servers` overrides. The two servers below are
+    declared globally; every operation under the **Public API** tag
+    overrides `servers` to point at the `api.` host, and every other
+    operation uses the default (main app) host. If you're generating a
+    client or reading this in Redoc/Swagger UI, check which server an
+    operation resolves to before assuming `/documents` and `/{token}` share
+    a host — they don't.
+
+    ### Authentication
+
+    Two independent auth mechanisms are in play, plus one admin-only one:
+
+    - **Session cookie** (`_npoint_session`): set by `POST /users` (sign up)
+      or `POST /users/sign_in`, sent automatically by browsers thereafter.
+      Required for any operation on account data or user-owned documents.
+    - **API bearer token** (`Authorization: Bearer <api_auth_token>`): only
+      relevant on the public API subdomain, only for **updating** a
+      *user-owned* document (anonymous documents never need it). The token
+      is a user's `api_auth_token`, which is only non-null if the user
+      `is_premium`. A correct token on a non-premium account gets
+      `402 Payment Required`, not `401`.
+    - **HTTP Basic** (`ADMIN_USERNAME` / `ADMIN_PASSWORD` env vars): admin
+      bandwidth-tracking endpoints only. This is an opt-in feature; if those
+      env vars aren't set (the default), both admin endpoints return
+      `503 Service Unavailable` regardless of what credentials you send.
+
+    ### CSRF
+
+    State-changing requests (`POST`/`PATCH`/`DELETE`) must satisfy Rails'
+    CSRF protection one of two ways:
+
+    - Send `Content-Type: application/json` — this **exempts the request
+      from the CSRF check entirely**. This is the recommended approach for
+      any programmatic/API client; every example in this document uses it.
+    - Or send a valid CSRF token (obtained from a prior page load's
+      `csrf_meta_tags`, or from the `X-CSRF-Token` response header returned
+      by sign-in/sign-out) as `X-CSRF-Token`.
+
+    A request that satisfies neither now gets a clean
+    `422 Unprocessable Entity` with an empty body (previously this crashed
+    with a `500`).
+
+    ### The double-JSON-encoding quirk (important)
+
+    On document- and schema-related endpoints, the `contents`, `schema`,
+    `original_contents`, and `original_schema` **request** fields must be
+    sent as **JSON-encoded string values**, not as native nested JSON. In
+    other words: encode your JSON payload to a string, then put that string
+    as the value of the field — you are JSON-encoding JSON.
+
+    ```
+    # WRONG — silently becomes null, no error:
+    curl -X POST http://localhost:3001/documents \
+      -H "Content-Type: application/json" \
+      -d '{"title": "My Doc", "contents": {"a": 1}}'
+
+    # RIGHT — contents is a JSON-encoded STRING:
+    curl -X POST http://localhost:3001/documents \
+      -H "Content-Type: application/json" \
+      -d '{"title": "My Doc", "contents": "{\"a\": 1}"}'
+    ```
+
+    Note this only applies to *request* bodies on `/documents*` and
+    `/schema/*`. Response bodies return `contents`/`schema` as native JSON
+    values (objects/arrays/etc.), and the public API subdomain's
+    `POST /{token}` endpoint takes a plain, non-double-encoded JSON body
+    (see the Public API section) — the quirk is specific to these two
+    controllers' parameter handling, not a project-wide convention.
+
+    ### No uniform error envelope
+
+    There is intentionally no single error shape across this API. Depending
+    on the endpoint, a failure response body is one of:
+
+    - Truly empty (`head :some_status`, zero bytes) — e.g.
+      `PATCH /users/me` when anonymous, `DELETE /documents/{token}` when
+      locked, CSRF failures.
+    - `{}` — e.g. `GET /users/me` when anonymous (deliberately, so frontend
+      code can treat "anonymous" as just an empty user object rather than an
+      error case), `POST /users/sign_in` on bad credentials, and — via
+      Devise/Warden's default failure responder — `PATCH /users` /
+      `DELETE /users` when anonymous.
+    - `{"errors": ["human readable message", ...]}` — validation failures on
+      account endpoints (`POST /users`, `PATCH /users`).
+    - `{"error": "..."}` (singular) — the admin endpoints' disabled-feature
+      response.
+    - `{"valid": bool, "errors": [...]}` — `POST /schema/validate`'s
+      "errors" key here means schema-validation errors, not a
+      request-failure envelope; it's present even on `200 OK`.
+
+    Check each operation's documented responses below rather than assuming a
+    consistent shape.
+
+    ### Rate limiting
+
+    All routes are rate-limited via Rack::Attack, backed by Redis:
+
+    - **Per client IP**: 600 requests per 5 minutes (120 req/min average)
+      across the whole app, except `/assets/*` and `/admin/*` (admin routes
+      are explicitly safelisted from throttling — only Basic Auth gates
+      them).
+    - **Per document token**: 600 requests per minute to the same 20-character
+      document token, matched against both the main app's
+      `/documents/<token>` paths and the API subdomain's `/<token>` paths.
+
+    Exceeding either limit returns `429 Too Many Requests` with
+    `Content-Type: text/plain` and the body `Retry later\n` (Rack::Attack's
+    unmodified default responder — this app does not set the optional
+    `Retry-After` header).
+
+    ### Malformed request bodies and unmatched routes
+
+    - A syntactically invalid JSON body on a request with
+      `Content-Type: application/json` returns `400 Bad Request` with an
+      empty body, app-wide.
+    - Requesting a route that doesn't exist returns a plain
+      `404 Not Found`.
+  contact:
+    name: Mustafahubs
+    email: sgocean25@gmail.com
+    url: https://github.com/Mustafahubs/npoint
+  license:
+    name: MIT
+    url: https://github.com/Mustafahubs/npoint/blob/main/LICENSE
+
+servers:
+  - url: http://localhost:3001
+    description: >-
+      Main application (local development). Account management and document
+      management endpoints — everything NOT tagged "Public API" lives here.
+      In production this is https://npoint.io (or whatever HOST is
+      configured to).
+  - url: http://api.localhost:3001
+    description: >-
+      Public API subdomain (local development). Only operations tagged
+      "Public API" live here — direct read/write access to a document's
+      `contents`. In production this is https://api.npoint.io (or
+      `api.` + whatever HOST is configured to). Every operation in this
+      group declares this server explicitly via an operation-level
+      `servers` override, since it differs from the default server above.
+
+tags:
+  - name: Authentication
+    description: Sign up, sign in/out, session/profile info. Devise-backed.
+  - name: Password Reset
+    description: Request and complete a password reset via emailed token.
+  - name: Documents
+    description: >-
+      Create, read, update, delete, and clone documents from the main app
+      host. Distinct from the Public API group, which serves a document's
+      raw `contents` from the `api.` subdomain.
+  - name: Schema
+    description: Standalone JSON Schema validate/generate helpers.
+  - name: Public API
+    description: >-
+      The actual "access your data" feature — served from the separate
+      `api.` subdomain (see the `servers` note on each operation below).
+      No envelope: responses are the document's raw `contents`.
+  - name: Admin
+    description: >-
+      Bandwidth-usage introspection. Opt-in (disabled unless
+      `ADMIN_USERNAME`/`ADMIN_PASSWORD` are set) and HTTP Basic Auth
+      protected.
+
+security: []
+
+paths:
+  # ---------------------------------------------------------------------
+  # Authentication
+  # ---------------------------------------------------------------------
+  /users:
+    post:
+      tags: [Authentication]
+      operationId: signUp
+      summary: Sign up (create account)
+      description: |
+        Creates a new user account and signs them in (sets the session
+        cookie). Body fields are **flat, top-level JSON** — not nested under
+        a `user` key (contrast with `POST /users/sign_in`, which requires
+        nesting).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+            example:
+              name: Ada Lovelace
+              email: ada@example.com
+              password: correct-horse-battery-staple
+              password_confirmation: correct-horse-battery-staple
+      responses:
+        '201':
+          description: Account created and signed in.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Session cookie (`_npoint_session`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                name: Ada Lovelace
+                email: ada@example.com
+                avatar_url: https://www.gravatar.com/avatar/abc123?d=identicon
+                has_documents: false
+                is_premium: false
+                api_auth_token: null
+                sample_update_url: http://api.localhost:3001/DOC_ID
+        '422':
+          description: >-
+            Validation failed (blank required field, duplicate email,
+            password/confirmation mismatch, etc).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorsResponse'
+              example:
+                errors: ["Password confirmation doesn't match Password"]
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    patch:
+      tags: [Authentication]
+      operationId: updateAccount
+      summary: Edit account (name, email, password)
+      description: |
+        Requires an active session. Devise's default account-update
+        behavior applies here: **`current_password` is effectively required
+        on every call**, even when you're only changing `name` and not
+        touching the password — omitting it fails validation with
+        `"Current password can't be blank"`, regardless of which other
+        fields you send. (This is standard Devise `update_with_password`
+        behavior, not an n:point-specific quirk.)
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdateRequest'
+            example:
+              name: Ada L.
+              current_password: correct-horse-battery-staple
+      responses:
+        '200':
+          description: Account updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyObject'
+              example: {}
+        '422':
+          description: Validation failed (e.g. missing/wrong `current_password`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorsResponse'
+              example:
+                errors: ["Current password can't be blank"]
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [Authentication]
+      operationId: deleteAccount
+      summary: Delete account
+      description: |
+        Permanently deletes the signed-in user's account. Requires
+        `Content-Type: application/json` (or a valid CSRF token) like any
+        other state-changing request — see the CSRF section above.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Account deleted. Empty body.
+        '401':
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyObject'
+              example: {}
+        '422':
+          description: >-
+            CSRF check failed (missing `Content-Type: application/json` and
+            no valid CSRF token). Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /users/sign_in:
+    post:
+      tags: [Authentication]
+      operationId: signIn
+      summary: Sign in
+      description: |
+        **The request body must be nested under a `user` key.** A flat body
+        (`{"email": ..., "password": ...}`, the same shape `POST /users`
+        accepts) is real, documented Devise behavior that always results in
+        a `401` here — Devise's `SessionsController` reads
+        `params[:user][:email]` / `params[:user][:password]`, so a flat body
+        looks like "no credentials supplied" rather than "wrong
+        credentials."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignInRequest'
+            example:
+              user:
+                email: ada@example.com
+                password: correct-horse-battery-staple
+      responses:
+        '200':
+          description: Signed in.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Session cookie (`_npoint_session`).
+            X-CSRF-Token:
+              schema:
+                type: string
+              description: >-
+                Fresh CSRF token (the token changes on login/logout — use
+                this to keep making CSRF-token-based requests without a
+                page reload; not needed if you use
+                `Content-Type: application/json` instead).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: >-
+            Wrong credentials, unknown email, or a flat (non-nested) request
+            body (see above).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyObject'
+              example: {}
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /users/sign_out:
+    delete:
+      tags: [Authentication]
+      operationId: signOut
+      summary: Sign out
+      description: |
+        Idempotent for anonymous callers. For a signed-in caller, requires
+        `Content-Type: application/json` (or a valid CSRF token) — without
+        one of those, this now returns a clean `422` (previously a `500`
+        crash) instead of successfully signing out.
+      responses:
+        '200':
+          description: >-
+            Signed out (or was already anonymous). Empty body. Includes a
+            fresh `X-CSRF-Token` response header.
+          headers:
+            X-CSRF-Token:
+              schema:
+                type: string
+        '422':
+          description: >-
+            Signed in, but missing `Content-Type: application/json` and no
+            valid CSRF token. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /users/me:
+    get:
+      tags: [Authentication]
+      operationId: getCurrentUser
+      summary: Get current user (session/profile info)
+      description: |
+        Deliberately returns `200 OK` with `{}` when anonymous rather than
+        `401` — this is documented in the source as intentional, so
+        frontend code can treat "no session" as just an empty user object.
+      responses:
+        '200':
+          description: >-
+            `200` either way; body is the user object when signed in, `{}`
+            when anonymous.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/UserResponse'
+                  - $ref: '#/components/schemas/EmptyObject'
+              examples:
+                signedIn:
+                  summary: Signed in
+                  value:
+                    name: Ada Lovelace
+                    email: ada@example.com
+                    avatar_url: https://www.gravatar.com/avatar/abc123?d=identicon
+                    has_documents: true
+                    is_premium: false
+                    api_auth_token: null
+                    sample_update_url: http://api.localhost:3001/DOC_ID
+                anonymous:
+                  summary: Anonymous
+                  value: {}
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    patch:
+      tags: [Authentication]
+      operationId: updateCurrentUserName
+      summary: Update current user's display name
+      description: |
+        Lightweight alternative to `PATCH /users` for the one field it's
+        actually used for in the UI: `name`. Only `name` is honored — unlike
+        `PATCH /users`, no `current_password` is required.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              example:
+                name: Ada L.
+      responses:
+        '200':
+          description: Updated (or unchanged, if `name` was blank/omitted).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Not signed in. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /users/me/image:
+    get:
+      tags: [Authentication]
+      operationId: getSessionProbeImage
+      summary: Session-state probe image (by design, not a bug)
+      description: |
+        Returns a PNG that **differs based on whether the caller is signed
+        in** (a goblin) **or anonymous** (an ogre). This is a deliberate,
+        long-standing CSRF/session-oracle test endpoint (see the comment in
+        `SessionsController#image`) — it demonstrates that a third-party
+        page can infer a visitor's n:point sign-in state simply by loading
+        this image and inspecting its pixels, since `GET` requests aren't
+        subject to CSRF protection. Document this as intentional behavior,
+        not something to "fix."
+      responses:
+        '200':
+          description: PNG image; content differs by auth state (see above).
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: '`inline; filename="goblin.png"` or `inline; filename="ogre.png"`.'
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ---------------------------------------------------------------------
+  # Password Reset
+  # ---------------------------------------------------------------------
+  /users/send_reset_password_email:
+    post:
+      tags: [Password Reset]
+      operationId: sendResetPasswordEmail
+      summary: Request a password reset email
+      description: |
+        Always returns `200 OK` with an empty body, **whether or not the
+        email address is registered**. This is a deliberate security choice
+        (fixed from a prior version that returned `404` for unknown emails,
+        which let an attacker enumerate registered accounts) — do not treat
+        a `200` here as confirmation the email exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+              example:
+                email: ada@example.com
+      responses:
+        '200':
+          description: >-
+            Always returned when `email` is present, regardless of whether
+            it's a registered account. Empty body.
+        '400':
+          description: Missing `email` parameter. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /users/reset_password:
+    post:
+      tags: [Password Reset]
+      operationId: resetPassword
+      summary: Complete a password reset
+      description: |
+        Consumes the raw token from the emailed reset link. Note this
+        endpoint has **only one password field** — no
+        `password_confirmation` (unlike sign-up/account-edit). On success
+        the user is automatically signed in (session cookie set) and the
+        token is single-use — replaying it, or sending a bogus token,
+        returns `400`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reset_token, password]
+              properties:
+                reset_token:
+                  type: string
+                  description: Raw token from the password-reset email link.
+                password:
+                  type: string
+              example:
+                reset_token: 3f8c1e2a9b7d4f6081e2c3a4b5d6e7f8
+                password: new-correct-horse-battery
+      responses:
+        '200':
+          description: Password reset; auto-signed-in.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: >-
+            Missing `reset_token`, or the token is invalid, expired, or
+            already used. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ---------------------------------------------------------------------
+  # Documents
+  # ---------------------------------------------------------------------
+  /documents:
+    get:
+      tags: [Documents]
+      operationId: listDocuments
+      summary: List the current user's documents
+      description: Requires an active session. Returns only documents owned by the caller.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The signed-in user's documents.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentIndexResponse'
+              example:
+                - token: eca72b46e05852ca6f18
+                  contents_locked: false
+                  editable: true
+                  owned_by_current_user: true
+                  schema_locked: false
+                  title: Grocery List
+        '401':
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyObject'
+              example: {}
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      tags: [Documents]
+      operationId: createDocument
+      summary: Create a document
+      description: |
+        No authentication required. If a session cookie is present, the new
+        document is owned by that user; otherwise it's anonymous (editable
+        by anyone with the token). If `title` is omitted, one is
+        auto-generated as `"Untitled (<random dish name>)"`.
+
+        **Remember the double-JSON-encoding quirk**: `contents`, `schema`,
+        `original_contents`, and `original_schema` must be JSON-encoded
+        strings, not native JSON — see the top-level description for a full
+        example. Sending a native JSON object/array for `contents` silently
+        stores `null`, with no error.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentCreateRequest'
+            example:
+              title: My New Doc
+              contents: "{\"hello\":\"world\"}"
+      responses:
+        '201':
+          description: Document created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+              example:
+                token: eca72b46e05852ca6f18
+                contents_locked: false
+                editable: true
+                owned_by_current_user: false
+                schema_locked: false
+                title: My New Doc
+                api_url: http://api.localhost:3001/eca72b46e05852ca6f18
+                contents: { hello: world }
+                example_subproperty_url: http://api.localhost:3001/eca72b46e05852ca6f18/hello
+                original_contents: "{\n  \"hello\": \"world\"\n}"
+                original_schema: ""
+                schema: null
+        '400':
+          description: >-
+            The document failed model validation (e.g. `contents` doesn't
+            match the supplied `schema`). Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /documents/{token}:
+    parameters:
+      - $ref: '#/components/parameters/DocumentToken'
+    get:
+      tags: [Documents]
+      operationId: getDocument
+      summary: Get a document (full record, main-app shape)
+      description: |
+        No authentication required — works for anonymous and owned
+        documents alike (this returns the full `DocumentResponse` envelope,
+        including `owned_by_current_user`/editability metadata; contrast
+        with the Public API's `GET /{token}`, which returns just the raw
+        `contents`).
+      responses:
+        '200':
+          description: The document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '404':
+          description: No document with that token. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    patch:
+      tags: [Documents]
+      operationId: updateDocument
+      summary: Update a document
+      description: |
+        **Ownership rule**: anonymous documents can be edited by anyone;
+        user-owned documents can only be edited by the owning signed-in
+        user (`401` otherwise).
+
+        **Lock gating**: `contents_locked` and `schema_locked` can now be
+        toggled in either direction (previously one-way — once locked, a
+        document could never be unlocked, which also made it permanently
+        undeletable, since delete refuses on a locked document). While
+        `contents_locked` is `true`, changes to `contents`/`original_contents`
+        are silently ignored; while `schema_locked` is `true`, changes to
+        `schema`/`original_schema` are silently ignored. `title` and the
+        lock flags themselves are always editable regardless of lock state.
+
+        Same double-JSON-encoding quirk as `POST /documents` applies to
+        `contents`/`schema`/`original_contents`/`original_schema`.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentUpdateRequest'
+            example:
+              title: Updated title
+              contents: "{\"hello\":\"world again\"}"
+      responses:
+        '200':
+          description: Document updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          description: Failed model validation. Empty body.
+        '401':
+          description: >-
+            Document is owned by another user (or caller is anonymous and
+            the document is owned). Empty body.
+        '404':
+          description: No document with that token. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [Documents]
+      operationId: deleteDocument
+      summary: Delete a document
+      description: |
+        Same ownership rule as update. Refuses with `400` if either
+        `contents_locked` or `schema_locked` is `true` — unlock first via
+        `PATCH /documents/{token}` with `{"contents_locked": false,
+        "schema_locked": false}`.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Deleted. Empty body.
+        '400':
+          description: >-
+            Refused: `contents_locked` or `schema_locked` is still `true`.
+            Empty body.
+        '401':
+          description: Document is owned by another user. Empty body.
+        '404':
+          description: No document with that token. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /documents/{token}/clone:
+    parameters:
+      - $ref: '#/components/parameters/DocumentToken'
+    post:
+      tags: [Documents]
+      operationId: cloneDocument
+      summary: Clone a document
+      description: |
+        Creates a copy with a new token, owned by the caller (or anonymous,
+        if the caller isn't signed in). The title becomes `"<original>
+        (Copy)"` (no double suffix if the source title already ends that
+        way). The clone's lock flags are always reset to `false`, regardless
+        of the source document's lock state.
+
+        **Ownership rule (now enforced)**: cloning a document now requires
+        the same ownership check as update/destroy — only the owning
+        signed-in user may clone a *user-owned* document. Previously anyone
+        could clone anyone else's document, including locked ones; this was
+        fixed. Anonymous/unowned documents can still be cloned by anyone.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The new, cloned document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '401':
+          description: >-
+            Document is owned by another user (or caller is anonymous and
+            the document is owned). Empty body.
+        '404':
+          description: No document with that token. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ---------------------------------------------------------------------
+  # Schema
+  # ---------------------------------------------------------------------
+  /schema/validate:
+    post:
+      tags: [Schema]
+      operationId: validateSchema
+      summary: Validate JSON contents against a JSON Schema
+      description: |
+        Standalone helper — doesn't touch any stored document. Both
+        `contents` and `schema` are **JSON-encoded strings** (the same
+        double-encoding quirk as the Documents endpoints).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contents, schema]
+              properties:
+                contents:
+                  type: string
+                  description: JSON-encoded string of the data to validate.
+                schema:
+                  type: string
+                  description: JSON-encoded string of the JSON Schema to validate against.
+              example:
+                contents: "{\"a\":\"notanumber\"}"
+                schema: "{\"type\":\"object\",\"required\":[\"b\"],\"properties\":{\"a\":{\"type\":\"number\"}}}"
+      responses:
+        '200':
+          description: >-
+            `200` regardless of whether validation passed — check the
+            `valid` field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaValidateResponse'
+              example:
+                valid: false
+                errors:
+                  - "The data did not contain a required property of 'b'"
+                  - "The property 'a' of type string did not match the following type: number"
+        '400':
+          description: >-
+            `contents` or `schema` missing or not valid JSON (fixed —
+            previously crashed with `500`). Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /schema/generate:
+    post:
+      tags: [Schema]
+      operationId: generateSchema
+      summary: Generate a JSON Schema from example JSON contents
+      description: |
+        Standalone helper. `contents` is a **JSON-encoded string** (same
+        quirk). Produces a draft-4 JSON Schema inferred from the shape of
+        the supplied data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contents]
+              properties:
+                contents:
+                  type: string
+                  description: JSON-encoded string of example data to infer a schema from.
+              example:
+                contents: "{\"a\":1}"
+      responses:
+        '200':
+          description: Generated schema.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaGenerateResponse'
+              example:
+                schema:
+                  type: object
+                  required: [a]
+                  properties:
+                    a:
+                      type: integer
+                original_schema: "{\n  \"type\": \"object\",\n  \"required\": [\n    \"a\"\n  ],\n  \"properties\": {\n    \"a\": {\n      \"type\": \"integer\"\n    }\n  }\n}"
+        '400':
+          description: >-
+            `contents` missing or not valid JSON (fixed — previously
+            inconsistent, sometimes `400`, sometimes `500`). Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ---------------------------------------------------------------------
+  # Public API (api.<host> subdomain)
+  # ---------------------------------------------------------------------
+  /:
+    get:
+      tags: [Public API]
+      operationId: publicApiInfo
+      summary: API subdomain landing info
+      description: |
+        People occasionally land on the bare `api.` subdomain looking for
+        the main site; this points them in the right direction.
+
+        **Server**: `api.` subdomain (see the `servers` override below) —
+        this is `GET /` on `api.npoint.io`, not the main app's root.
+      servers:
+        - url: http://api.localhost:3001
+          description: Public API subdomain.
+      responses:
+        '200':
+          description: Basic info about the API.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiInfoResponse'
+              example:
+                homepage: https://localhost
+                contact: sgocean25@gmail.com
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /{token}:
+    parameters:
+      - $ref: '#/components/parameters/DocumentToken'
+    get:
+      tags: [Public API]
+      operationId: getDocumentContents
+      summary: Get a document's contents (raw, unwrapped)
+      description: |
+        Returns the document's `contents` **directly as the response body**
+        — no envelope. Depending on what's stored, that could be a JSON
+        object, array, or a bare scalar (string/number/bool/null); a bare
+        scalar is still rendered as valid JSON text (e.g. a stored string
+        `"abc"` is returned as the 5-byte body `"abc"`, quotes included).
+
+        **Server**: `api.` subdomain — this is `GET /{token}` on
+        `api.npoint.io`, distinct from the main app's
+        `GET /documents/{token}` (which returns the full record envelope,
+        not just `contents`).
+      servers:
+        - url: http://api.localhost:3001
+          description: Public API subdomain.
+      responses:
+        '200':
+          description: The document's raw `contents`.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: >-
+                `max-age=3600, public` normally; `max-age=300, public` if
+                the document is internally flagged as suspicious/malicious
+                content.
+          content:
+            application/json:
+              schema: {}
+              example:
+                next_steps:
+                  - Edit this JSON bin
+                  - Sign up to make bins only you can edit
+                  - Access this bin via the API (see the footer)
+        '404':
+          description: No document with that token. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      tags: [Public API]
+      operationId: updateDocumentContents
+      summary: Replace a document's contents
+      description: |
+        Body is the new `contents` as a **plain JSON value** — an object,
+        array, or scalar — sent as a normal (single-encoded) JSON request
+        body. This is *not* the double-JSON-encoding quirk that applies to
+        `/documents` and `/schema/*`; here, `contents` isn't a named field
+        at all, the entire request body *is* the new contents. On success,
+        the response echoes back the parsed contents you sent.
+
+        Only supported at the document root — appending a `/{path}` suffix
+        (see `GET /{token}/{path}` below) is not supported for updates and
+        always returns `404`.
+
+        **Auth**: an *anonymous*-owned document can be updated by anyone,
+        no auth required. A *user*-owned document requires
+        `Authorization: Bearer <api_auth_token>` using that user's
+        `api_auth_token` (only present/non-null on `is_premium` users —
+        see `UserResponse.api_auth_token`). Missing/wrong token → `401`.
+        Correct token but the owning account isn't premium → `402`. Correct
+        token and premium → `200`.
+
+        **Server**: `api.` subdomain — this is `POST /{token}` on
+        `api.npoint.io`.
+      servers:
+        - url: http://api.localhost:3001
+          description: Public API subdomain.
+      security:
+        - {}
+        - apiBearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+            example:
+              next_steps:
+                - Updated via the public API
+      responses:
+        '200':
+          description: >-
+            Updated. Response body is the new contents (echoes the parsed
+            request body).
+          content:
+            application/json:
+              schema: {}
+              example:
+                next_steps:
+                  - Updated via the public API
+        '400':
+          description: >-
+            Malformed JSON body, or the new contents fail model validation
+            (e.g. against the document's `schema`). Empty body.
+        '401':
+          description: >-
+            Document is user-owned and the request is missing a
+            `Bearer` token, or the token doesn't match the owner's
+            `api_auth_token`. Empty body.
+        '402':
+          description: >-
+            Bearer token is correct, but the owning account is not
+            `is_premium`. Empty body.
+        '404':
+          description: >-
+            No document with that token, or a `/{path}` suffix was appended
+            (updates are root-only). Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /{token}/{path}:
+    parameters:
+      - $ref: '#/components/parameters/DocumentToken'
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+        description: >-
+          One or more `/`-separated path segments descending into
+          `contents` by object key or (for arrays) numeric index, e.g.
+          `someKey`, `someKey/nested`, or `list/0`.
+        example: someKey/nested
+    get:
+      tags: [Public API]
+      operationId: getDocumentSubproperty
+      summary: Get a sub-value within a document's contents
+      description: |
+        Same as `GET /{token}`, but descends into `contents` by the given
+        path before returning — e.g. `GET /{token}/list/0` returns just
+        `contents.list[0]`. Each segment must resolve to either an object
+        key or, if the current value is an array, a valid numeric index.
+
+        **Server**: `api.` subdomain.
+      servers:
+        - url: http://api.localhost:3001
+          description: Public API subdomain.
+      responses:
+        '200':
+          description: The resolved sub-value.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema: {}
+              example: 10
+        '404':
+          description: >-
+            No document with that token, an unresolvable path segment
+            (nonexistent key/index), or a non-array indexed with a
+            non-numeric segment. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      tags: [Public API]
+      operationId: updateDocumentSubpropertyUnsupported
+      summary: (Not supported) updating via a sub-path
+      description: |
+        Path suffixes are **not supported** for updates — this always
+        returns `404 Not Found`, regardless of the token or path. Use
+        `POST /{token}` (root only) to replace a document's entire
+        `contents`.
+
+        **Server**: `api.` subdomain.
+      servers:
+        - url: http://api.localhost:3001
+          description: Public API subdomain.
+      responses:
+        '404':
+          description: Always. Path-suffixed updates are not supported. Empty body.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ---------------------------------------------------------------------
+  # Admin
+  # ---------------------------------------------------------------------
+  /admin/bandwidth:
+    get:
+      tags: [Admin]
+      operationId: getBandwidthStats
+      summary: Top documents by bandwidth usage
+      description: |
+        Opt-in: disabled unless both `ADMIN_USERNAME` and `ADMIN_PASSWORD`
+        env vars are set (the default in `docker-compose.yml`). When
+        disabled, returns `503` regardless of whether credentials were
+        supplied. Exempt from the app-wide Rack::Attack IP rate limit
+        (`/admin/*` is explicitly safelisted) — only HTTP Basic Auth gates
+        access.
+      security:
+        - adminBasicAuth: []
+      parameters:
+        - name: hours
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 24
+          description: Look-back window, in hours.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+          description: Max number of documents to return, ranked by total bytes served.
+      responses:
+        '200':
+          description: Bandwidth stats.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBandwidthResponse'
+              example:
+                period_hours: 24
+                total_documents: 1
+                stats:
+                  - token: eca72b46e05852ca6f18
+                    total_mb: 0.12
+                    total_bytes: 125829
+                    request_count: 42
+                    avg_bytes_per_request: 2996
+                    first_seen: "2026-08-08T14:03:11Z"
+                    last_seen: "2026-08-09T09:41:02Z"
+                    document_url: http://localhost:3001/documents/eca72b46e05852ca6f18
+                total_bandwidth_mb: 0.12
+                total_requests: 42
+        '401':
+          description: Missing or invalid Basic Auth credentials (feature is enabled).
+        '503':
+          description: >-
+            Admin endpoints are disabled because `ADMIN_USERNAME`/
+            `ADMIN_PASSWORD` aren't both set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDisabledResponse'
+              example:
+                error: >-
+                  Admin endpoint disabled. Set ADMIN_USERNAME and
+                  ADMIN_PASSWORD environment variables.
+
+  /admin/bandwidth/clear:
+    post:
+      tags: [Admin]
+      operationId: clearBandwidthStats
+      summary: Clear in-memory bandwidth tracking data
+      description: |
+        Same opt-in/auth rules as `GET /admin/bandwidth`. CSRF protection is
+        explicitly skipped for this endpoint (admin routes are HTTP Basic
+        Auth gated instead), so no `Content-Type: application/json`
+        requirement applies here.
+      security:
+        - adminBasicAuth: []
+      responses:
+        '200':
+          description: Tracking data cleared.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminClearResponse'
+              example:
+                message: Bandwidth tracking data cleared
+        '401':
+          description: Missing or invalid Basic Auth credentials (feature is enabled).
+        '503':
+          description: >-
+            Admin endpoints are disabled because `ADMIN_USERNAME`/
+            `ADMIN_PASSWORD` aren't both set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDisabledResponse'
+              example:
+                error: >-
+                  Admin endpoint disabled. Set ADMIN_USERNAME and
+                  ADMIN_PASSWORD environment variables.
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: _npoint_session
+      description: >-
+        Devise session cookie, set by `POST /users` (sign up) or
+        `POST /users/sign_in`.
+    apiBearerToken:
+      type: http
+      scheme: bearer
+      description: >-
+        A user's `api_auth_token` (only non-null when `is_premium`). Only
+        needed when updating a *user-owned* document via the public API;
+        never needed for anonymous documents.
+    adminBasicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic Auth using the `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars.
+
+  parameters:
+    DocumentToken:
+      name: token
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9]{20}$'
+      description: 20-character hex document token.
+      example: eca72b46e05852ca6f18
+
+  responses:
+    RateLimited:
+      description: >-
+        Rate limit exceeded (per-IP or per-document-token — see the
+        top-level Rate Limiting section). Rack::Attack's default responder.
+      headers:
+        Content-Type:
+          schema:
+            type: string
+            enum: [text/plain]
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: |
+            Retry later
+
+  schemas:
+    EmptyObject:
+      type: object
+      additionalProperties: false
+      description: Literal `{}` — used where an endpoint deliberately returns no fields.
+      example: {}
+
+    ErrorsResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+      required: [errors]
+      example:
+        errors: ["Email has already been taken"]
+
+    UserResponse:
+      type: object
+      description: UserSerializer output.
+      properties:
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+        avatar_url:
+          type: string
+          format: uri
+          description: Gravatar identicon URL derived from the email's MD5 hash.
+        has_documents:
+          type: boolean
+        is_premium:
+          type: boolean
+        api_auth_token:
+          type: string
+          nullable: true
+          description: >-
+            Non-null only when `is_premium` is `true`. Used as the
+            `Authorization: Bearer` credential for the public API's
+            `POST /{token}` on user-owned documents.
+        sample_update_url:
+          type: string
+          format: uri
+          description: >-
+            Example public-API update URL with a placeholder token
+            (`DOC_ID`), for UI display purposes.
+      required: [name, email, avatar_url, has_documents, is_premium, api_auth_token, sample_update_url]
+      example:
+        name: Ada Lovelace
+        email: ada@example.com
+        avatar_url: https://www.gravatar.com/avatar/abc123?d=identicon
+        has_documents: true
+        is_premium: false
+        api_auth_token: null
+        sample_update_url: http://api.localhost:3001/DOC_ID
+
+    SignUpRequest:
+      type: object
+      required: [email, password, password_confirmation]
+      properties:
+        name:
+          type: string
+          description: Optional; not validated for presence.
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        password_confirmation:
+          type: string
+      example:
+        name: Ada Lovelace
+        email: ada@example.com
+        password: correct-horse-battery-staple
+        password_confirmation: correct-horse-battery-staple
+
+    SignInRequest:
+      type: object
+      required: [user]
+      properties:
+        user:
+          type: object
+          required: [email, password]
+          properties:
+            email:
+              type: string
+              format: email
+            password:
+              type: string
+      example:
+        user:
+          email: ada@example.com
+          password: correct-horse-battery-staple
+
+    AccountUpdateRequest:
+      type: object
+      description: >-
+        All fields optional individually, but `current_password` is
+        effectively required by Devise's default `update_with_password`
+        behavior regardless of which other fields are being changed.
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        password_confirmation:
+          type: string
+        current_password:
+          type: string
+          description: Required in practice — see operation description.
+      example:
+        name: Ada L.
+        current_password: correct-horse-battery-staple
+
+    DocumentIndexResponse:
+      type: object
+      description: DocumentIndexSerializer output (used by `GET /documents`).
+      properties:
+        token:
+          type: string
+          example: eca72b46e05852ca6f18
+        contents_locked:
+          type: boolean
+        editable:
+          type: boolean
+          description: >-
+            Whether the *current caller* (session or anonymous) is allowed
+            to edit this document — true for anonymous documents, or for
+            owned documents when the caller is the owner.
+        owned_by_current_user:
+          type: boolean
+        schema_locked:
+          type: boolean
+        title:
+          type: string
+      required: [token, contents_locked, editable, owned_by_current_user, schema_locked, title]
+
+    DocumentResponse:
+      description: >-
+        DocumentSerializer output (used by every Documents endpoint except
+        `GET /documents`, which uses the lighter `DocumentIndexResponse`).
+      allOf:
+        - $ref: '#/components/schemas/DocumentIndexResponse'
+        - type: object
+          properties:
+            api_url:
+              type: string
+              format: uri
+              description: This document's public API root URL (the `api.` subdomain).
+            contents:
+              description: >-
+                The document's stored JSON data. Any JSON type (object,
+                array, string, number, boolean) or `null`; schema
+                intentionally unconstrained.
+            example_subproperty_url:
+              type: string
+              format: uri
+              nullable: true
+              description: >-
+                A sample public-API URL descending 1-2 levels into
+                `contents`, for UI display. `null` if `contents` is empty/absent.
+            original_contents:
+              type: string
+              description: >-
+                Pretty-printed string form of `contents`, client-managed —
+                NOT automatically re-derived from `contents` on update.
+            original_schema:
+              type: string
+              description: Pretty-printed string form of `schema`, client-managed.
+            schema:
+              type: object
+              nullable: true
+              additionalProperties: true
+              description: JSON Schema the document's `contents` must satisfy, if set.
+          required:
+            - api_url
+            - contents
+            - example_subproperty_url
+            - original_contents
+            - original_schema
+            - schema
+      example:
+        token: eca72b46e05852ca6f18
+        contents_locked: false
+        editable: true
+        owned_by_current_user: false
+        schema_locked: false
+        title: My New Doc
+        api_url: http://api.localhost:3001/eca72b46e05852ca6f18
+        contents: { hello: world }
+        example_subproperty_url: http://api.localhost:3001/eca72b46e05852ca6f18/hello
+        original_contents: "{\n  \"hello\": \"world\"\n}"
+        original_schema: ""
+        schema: null
+
+    DocumentCreateRequest:
+      type: object
+      description: >-
+        All fields optional. `contents`/`schema`/`original_contents`/
+        `original_schema` must be JSON-encoded STRINGS (see the
+        double-encoding quirk in the top-level description) — sending a
+        native JSON object/array here silently stores `null`.
+      properties:
+        title:
+          type: string
+          description: Defaults to `"Untitled (<random dish name>)"` if omitted.
+        contents:
+          type: string
+          description: JSON-encoded string, e.g. `"{\"a\":1}"`.
+        schema:
+          type: string
+          description: JSON-encoded string of a JSON Schema.
+        original_contents:
+          type: string
+          description: >-
+            Pretty-printed string form of `contents`, client-managed. If
+            omitted, the server derives it by pretty-printing `contents`.
+        original_schema:
+          type: string
+          description: Pretty-printed string form of `schema`, client-managed.
+        contents_locked:
+          type: boolean
+          default: false
+        schema_locked:
+          type: boolean
+          default: false
+        generate_contents:
+          type: boolean
+          description: >-
+            If true, generates placeholder sample `contents` server-side,
+            ignoring any `contents` value you also send.
+      example:
+        title: My New Doc
+        contents: "{\"hello\":\"world\"}"
+
+    DocumentUpdateRequest:
+      type: object
+      description: >-
+        All fields optional. `title`, `contents_locked`, and
+        `schema_locked` are always applied. `contents`/`original_contents`
+        are applied only while the document's current `contents_locked` is
+        `false`; `schema`/`original_schema` only while `schema_locked` is
+        `false` (otherwise silently ignored — no error). Same
+        double-JSON-encoding-string requirement as document creation.
+      properties:
+        title:
+          type: string
+        contents:
+          type: string
+          description: JSON-encoded string. Ignored while `contents_locked` is true.
+        original_contents:
+          type: string
+          description: Ignored while `contents_locked` is true.
+        schema:
+          type: string
+          description: JSON-encoded string. Ignored while `schema_locked` is true.
+        original_schema:
+          type: string
+          description: Ignored while `schema_locked` is true.
+        contents_locked:
+          type: boolean
+        schema_locked:
+          type: boolean
+      example:
+        title: Updated title
+        contents: "{\"hello\":\"world again\"}"
+
+    SchemaValidateResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+          description: Human-readable validation error messages. Empty when `valid` is true.
+      required: [valid, errors]
+
+    SchemaGenerateResponse:
+      type: object
+      properties:
+        schema:
+          type: object
+          additionalProperties: true
+          description: Inferred draft-4 JSON Schema, as a native JSON object.
+        original_schema:
+          type: string
+          description: Pretty-printed string form of `schema`.
+      required: [schema, original_schema]
+
+    ApiInfoResponse:
+      type: object
+      properties:
+        homepage:
+          type: string
+          format: uri
+        contact:
+          type: string
+          format: email
+      required: [homepage, contact]
+
+    AdminDisabledResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    AdminClearResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    AdminBandwidthStat:
+      type: object
+      properties:
+        token:
+          type: string
+        total_mb:
+          type: number
+          description: Total bytes served for this document, in MB (rounded to 2 decimals).
+        total_bytes:
+          type: integer
+        request_count:
+          type: integer
+        avg_bytes_per_request:
+          type: integer
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        document_url:
+          type: string
+          format: uri
+      required:
+        - token
+        - total_mb
+        - total_bytes
+        - request_count
+        - avg_bytes_per_request
+        - first_seen
+        - last_seen
+        - document_url
+
+    AdminBandwidthResponse:
+      type: object
+      properties:
+        period_hours:
+          type: integer
+        total_documents:
+          type: integer
+          description: Number of documents in the (possibly limit-truncated) `stats` array.
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminBandwidthStat'
+        total_bandwidth_mb:
+          type: number
+        total_requests:
+          type: integer
+      required: [period_hours, total_documents, stats, total_bandwidth_mb, total_requests]
