@@ -9,8 +9,11 @@ runs a small process (`cloudflared`) next to your app that makes an
 outbound-only connection to Cloudflare's network; Cloudflare then routes
 requests for your chosen subdomain to it.
 
-You do not need to run `cloudflared` separately - it runs as an extra
-container alongside the app, defined in `docker-compose.tunnel.yml`.
+By default `cloudflared` runs as an extra container alongside the app,
+defined in `docker-compose.tunnel.yml` - you don't need to install or run
+it separately. If you already run `cloudflared` as a host-level service
+(e.g. one shared tunnel across several apps on the same machine), see the
+note at the end of step 4 instead.
 
 ## What you'll end up with
 
@@ -126,6 +129,29 @@ Check the tunnel's own logs if it doesn't come up:
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.tunnel.yml logs cloudflared
 ```
+
+**Already running `cloudflared` as a host-level service** (e.g. one shared
+tunnel across several apps on the same machine, rather than per-project
+Docker sidecars)? You still want the tunnel overlay for its environment
+variables (`HOST`, `SECRET_KEY_BASE`, etc.), just without starting its
+`cloudflared` container:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --build web
+```
+
+Naming `web` explicitly starts it (and its `db`/`redis` dependencies) but
+not the overlay's `cloudflared` service - you may see a harmless warning
+about `CLOUDFLARE_TUNNEL_TOKEN` being unset, since Compose still parses
+that service's definition even though it won't start. Two things to get
+right for this setup specifically:
+
+- Point your host-level tunnel's Public Hostname at `localhost:3001` (or
+  `127.0.0.1:3001`), not `web:3001` - that Docker-internal DNS name only
+  resolves for containers inside this compose network, which your
+  host-level `cloudflared` isn't part of.
+- `docker-compose.yml` still needs to publish port 3001 to the host (it
+  does, by default) for `localhost:3001` to be reachable at all.
 
 ## Optional: password-reset emails and admin bandwidth tracking
 
