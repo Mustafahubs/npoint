@@ -9,7 +9,7 @@ class Api::InfoController < ApplicationController
   # the right direction. Could put API version info here.
   def index
     render json: {
-      homepage: "https://#{ENV.fetch('HOST', 'localhost')}",
+      homepage: "#{ENV.fetch('PUBLIC_PROTOCOL', 'http')}://#{ENV.fetch('HOST', 'localhost')}",
       contact: "sgocean25@gmail.com"
     }
   end
