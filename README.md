@@ -8,24 +8,25 @@
 [![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-6BA539?logo=openapiinitiative&logoColor=white)](openapi.yaml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-n:point is a lightweight JSON data store for your app or prototype.
-Originally created by [Alex Zirbel](https://github.com/azirbel) as
-[npoint.io](https://www.npoint.io/); this is a self-hosted, open-source fork
-maintained by [Mustafahubs](https://github.com/Mustafahubs) — see
+n:point is a lightweight JSON data store for your app or prototype. It was
+originally created by [Alex Zirbel](https://github.com/azirbel) as
+[npoint.io](https://www.npoint.io/). This repo is a self-hosted, open-source
+fork maintained by [Mustafahubs](https://github.com/Mustafahubs); see
 [Copyright & License](#copyright--license) for full attribution.
 
-🚀 **[Try the live demo of this fork](https://npoint.fastapi.us/)** — the
-public API is served from
-[api-npoint.fastapi.us](https://api-npoint.fastapi.us/) (see
-[why it's `api-npoint.` and not `api.npoint.`](docs/cloudflare-tunnel.md)).
+**[Try the live demo of this fork](https://npoint.fastapi.us/).** The public
+API is served from
+[api-npoint.fastapi.us](https://api-npoint.fastapi.us/); see
+[why it's `api-npoint.` and not `api.npoint.`](docs/cloudflare-tunnel.md) if
+you're curious.
 
-Save FAQ answers, customer stories, configuration data, or anything else that
-will fit in a JSON blob. Then access your data directly via API.
+Save FAQ answers, customer stories, configuration data, or anything else
+that will fit in a JSON blob. Then access your data directly via API.
 
-Once your app is live, come back later to edit your saved JSON without having
-to redeploy. Or share a login with a friend so they can help you experiment!
-Features like schema validation and locking mean you can make these changes
-confidently, without breaking your app.
+Once your app is live, come back later to edit your saved JSON without
+having to redeploy. Or share a login with a friend so they can help you
+experiment. Features like schema validation and locking mean you can make
+these changes confidently, without breaking your app.
 
 ![Demo screenshot](public/img/demo-screenshot-locked.png)
 
@@ -33,20 +34,21 @@ confidently, without breaking your app.
 
 - [Run it locally with Docker](#run-it-locally-with-docker)
 - [Expose it over the internet](#expose-it-over-the-internet)
+- [Self-hosting elsewhere](#self-hosting-elsewhere)
 - [API documentation](#api-documentation)
 - [Contributing](#contributing)
 - [Development](#development)
 - [Maintaining](#maintaining)
-- [Self-hosting elsewhere](#self-hosting-elsewhere)
 - [Similar tools](#similar-tools)
+- [Codebase TODOs / Wishlist](#codebase-todos--wishlist)
 - [Copyright & license](#copyright--license)
 
 ## Run it locally with Docker
 
-🐳 The fastest way to get n:point running on your own machine — no Ruby,
-Node, Postgres, or Redis installation required.
+This is the fastest way to get n:point running on your own machine. You
+don't need to install Ruby, Node, Postgres, or Redis yourself.
 
-1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose).
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (it includes Docker Compose).
 2. Clone the repo and start it up:
 
    ```bash
@@ -58,40 +60,83 @@ Node, Postgres, or Redis installation required.
 3. Open [http://localhost:3001](http://localhost:3001).
 
 The first run builds the frontend, installs gems, and sets up the database
-for you. Your data persists in a Docker volume between runs; use
+for you. Your data persists in a Docker volume between runs; run
 `docker compose down -v` if you want to wipe it and start fresh.
 
-If port `3001` is already in use on your machine, change the host side of
-the port mapping in `docker-compose.yml` (e.g. `"8080:3001"`) and also
-uncomment/set `PUBLIC_PORT` in the `web` service's environment to match —
-otherwise links the app generates (like a document's public API URL) will
-point at the wrong port. See the comments in `docker-compose.yml`.
+If port `3001` is already taken on your machine, change the host side of
+the port mapping in `docker-compose.yml` (for example `"8080:3001"`), and
+also uncomment and set `PUBLIC_PORT` in the `web` service's environment to
+match. Otherwise, the links the app generates (like a document's public
+API URL) will point at the wrong port. There are comments in
+`docker-compose.yml` walking through this.
 
 ## Expose it over the internet
 
-🌐 Already have a domain on Cloudflare? You can make your local Docker
-deployment reachable from the internet on a subdomain — no port-forwarding,
-static IP, or extra server required — using a
+Already have a domain on Cloudflare? You can make your local Docker
+deployment reachable from the internet on a subdomain, with no
+port-forwarding, static IP, or extra server required, using a
 [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
 
-See **[docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md)** for the full,
+See [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md) for the full,
 step-by-step guide, including the Cloudflare dashboard setup and the
 `docker-compose.tunnel.yml` overlay that runs alongside your existing local
 setup.
 
+## Self-hosting elsewhere
+
+Want to run your own instance of n:point somewhere other than Docker? Go
+right ahead. A couple of paths, depending on what you're optimizing for:
+
+- **Any other container host**: `Dockerfile` and `docker-compose.yml` are a
+  good starting point for Fly.io, Railway, a VPS with Docker, or anywhere
+  else that runs containers.
+- **A traditional PaaS deployment**: [render.com](https://render.com/) is
+  what the original project uses for [npoint.io](https://www.npoint.io).
+
+  1. Set up a hosted Postgres database in Render, and make sure
+     `DATABASE_URL` points there.
+  2. Set up a hosted Redis (or [Valkey](https://valkey.io/)) instance, and
+     make sure `REDIS_URL` points there too. This is required for rate
+     limiting (Rack::Attack).
+  3. Configure environment variables. You'll at least need:
+     - `HOST` (for example `yourdomain.com`)
+     - `SECRET_KEY_BASE` (generate one with `bin/rails secret`)
+     - `RAILS_MAX_THREADS` and `RAILS_SERVE_STATIC_FILES=true` (typical
+       Rails production settings)
+     - `CLOUDFLARE_API_TOKEN` (optional, for cache purging; a different
+       feature from the [Cloudflare Tunnel](docs/cloudflare-tunnel.md)
+       setup above)
+     - `CLOUDFLARE_ZONE_ID` (optional, for cache purging)
+  4. Use these Render settings:
+
+     ```
+     # build command
+     ./build.sh
+
+     # start command
+     ./start.sh
+     ```
+
+  Password-reset emails go through a [SendGrid](https://sendgrid.com/)
+  account (`SENDGRID_API_KEY`) using a dynamic email template ID that lives
+  in the original maintainer's SendGrid account. You'll need to create your
+  own template and swap in its ID (see the comment in
+  `app/lib/transactional_mail.rb`), or remove the feature and handle
+  password resets yourself.
+
 ## API documentation
 
-📖 n:point's HTTP API (account management, document CRUD, schema
-validation, and the public `api.<host>` document-access API) is fully
-documented as an [OpenAPI 3.0](https://www.openapis.org/) spec.
+n:point's HTTP API (account management, document CRUD, schema validation,
+and the public `api.<host>` document-access API) is fully documented as an
+[OpenAPI 3.0](https://www.openapis.org/) spec.
 
-Once your instance is running (locally or over a tunnel), open
-**`/api-docs`** in a browser for interactive, browsable documentation
-(rendered with [Redoc](https://github.com/Redocly/redoc)) — for example
-[http://localhost:3001/api-docs](http://localhost:3001/api-docs) for a local
-Docker setup. The raw spec is served alongside it at `/openapi.yaml`
-(source: [`openapi.yaml`](openapi.yaml)), so you can also load it into tools
-like [Swagger UI](https://swagger.io/tools/swagger-ui/),
+Once your instance is running, locally or over a tunnel, open `/api-docs`
+in a browser for interactive, browsable documentation, rendered with
+[Redoc](https://github.com/Redocly/redoc). For a local Docker setup that's
+[http://localhost:3001/api-docs](http://localhost:3001/api-docs). The raw
+spec is served alongside it at `/openapi.yaml` (source:
+[`openapi.yaml`](openapi.yaml)), so you can also load it into tools like
+[Swagger UI](https://swagger.io/tools/swagger-ui/),
 [Postman](https://www.postman.com/), or generate an API client with
 [OpenAPI Generator](https://openapi-generator.tech/).
 
@@ -99,14 +144,15 @@ like [Swagger UI](https://swagger.io/tools/swagger-ui/),
 
 Contributions are welcome!
 
-Please open an issue to discuss proposed changes, rather than opening a pull
-request directly.
+Please open an issue to discuss proposed changes, rather than opening a
+pull request directly.
 
 ## Development
 
-If you want to run the app natively (not in Docker) to work on it — for
-just using n:point, the [Docker setup](#run-it-locally-with-docker) above is
-much simpler and is what most people should use.
+This section covers running the app natively, without Docker, for working
+on the codebase itself. If you just want to use n:point, the
+[Docker setup](#run-it-locally-with-docker) above is simpler and is what
+most people should use.
 
 #### Setup
 
@@ -126,7 +172,8 @@ export NODE_GYP_FORCE_PYTHON=/opt/homebrew/bin/python3.10
 bundle
 ```
 
-Note that I'm not using yarn now for local builds; can't seem to get it to reliably install.
+Note that I'm not using yarn now for local builds; can't seem to get it to
+reliably install.
 
 Yarn is still used in deploys.
 
@@ -149,9 +196,10 @@ rspec
 node jest  # no jest tests yet
 ```
 
-**Important note**: Rspec integration tests run against the compiled version of the
-app in `app/assets`. Build with `node scripts/build.js` first, or set up capybara to run against
-your live webpack version (I haven't done this yet, but have ideas in `spec_helper.rb`).
+**Important note**: Rspec integration tests run against the compiled
+version of the app in `app/assets`. Build with `node scripts/build.js`
+first, or set up capybara to run against your live webpack version (I
+haven't done this yet, but have ideas in `spec_helper.rb`).
 
 ## Maintaining
 
@@ -173,7 +221,8 @@ Deploy prod manually via render UI.
 
 #### Bandwidth tracking (Admin)
 
-To monitor which API documents are using the most bandwidth, first set credentials:
+To monitor which API documents are using the most bandwidth, first set
+credentials:
 
 ```bash
 export ADMIN_USERNAME=your_username
@@ -193,8 +242,9 @@ curl -u $ADMIN_USERNAME:$ADMIN_PASSWORD http://localhost:3001/admin/bandwidth?ho
 curl -u $ADMIN_USERNAME:$ADMIN_PASSWORD -X POST http://localhost:3001/admin/bandwidth/clear
 ```
 
-Tracking runs in-memory and automatically cleans up data older than 24 hours.
-This endpoint is disabled (returns `503`) unless both env vars above are set.
+Tracking runs in-memory and automatically cleans up data older than 24
+hours. This endpoint is disabled (returns `503`) unless both env vars above
+are set.
 
 ## Similar tools
 
@@ -203,59 +253,18 @@ This endpoint is disabled (returns `503`) unless both env vars above are set.
 * [AirTable](https://airtable.com)
 * [JSON Schema Validator](https://www.jsonschemavalidator.net/)
 
-## Bookmarks
-
-* [JSON Schema](http://json-schema.org/)
-* [JSON in Postgres](https://blog.codeship.com/unleash-the-power-of-storing-json-in-postgres/)
-
-## Self-hosting elsewhere
-
-Want to run your own instance of n:point somewhere other than Docker? Go
-right ahead — there are a few paths depending on what you're optimizing for:
-
-- **Local use, or exposed via a tunnel**: see
-  [Run it locally with Docker](#run-it-locally-with-docker) and
-  [Expose it over the internet](#expose-it-over-the-internet) above.
-  `Dockerfile` and `docker-compose.yml` are also a good starting point for
-  deploying to any other container host (Fly.io, Railway, a VPS with Docker,
-  etc).
-- **A traditional PaaS deployment**: [render.com](https://render.com/) is
-  what the original project uses for [npoint.io](https://www.npoint.io).
-
-  1. Set up a hosted Postgres DB in Render, and make sure `DATABASE_URL` points there.
-  2. Set up a hosted Redis (or [Valkey](https://valkey.io/)) instance, and make sure `REDIS_URL` points there — required for rate limiting (Rack::Attack).
-  3. Configure environment variables. You'll at least need:
-     - `HOST` (e.g. `yourdomain.com`)
-     - `SECRET_KEY_BASE` (generate with `bin/rails secret`)
-     - `RAILS_MAX_THREADS`, `RAILS_SERVE_STATIC_FILES=true` (typical Rails production settings)
-     - `CLOUDFLARE_API_TOKEN` (optional, for cache purging — a different feature from the [Cloudflare Tunnel](docs/cloudflare-tunnel.md) setup above)
-     - `CLOUDFLARE_ZONE_ID` (optional, for cache purging)
-  4. Use these Render settings:
-
-     ```
-     # build command
-     ./build.sh
-
-     # start command
-     ./start.sh
-     ```
-
-  Password-reset emails go through a [SendGrid](https://sendgrid.com/)
-  account (`SENDGRID_API_KEY`) using a dynamic email template ID that lives
-  in the original maintainer's SendGrid account — you'll need to create your
-  own template and swap in its ID (see the comment in
-  `app/lib/transactional_mail.rb`), or remove the feature and handle
-  password resets yourself.
+Bookmarks worth knowing about: [JSON Schema](http://json-schema.org/) and
+[JSON in Postgres](https://blog.codeship.com/unleash-the-power-of-storing-json-in-postgres/).
 
 ## Codebase TODOs / Wishlist
 
-* Add a real error-tracking service — this fork removed `sentry-raven`
-  (search history for why: it was unconfigured, deprecated, and was
-  actually swallowing/misrouting unhandled exceptions app-wide). Nothing
-  has replaced it yet.
+* Add a real error-tracking service. This fork removed `sentry-raven`
+  (search the commit history for why: it was unconfigured, deprecated, and
+  was actually swallowing and misrouting unhandled exceptions app-wide).
+  Nothing has replaced it yet.
 * This fork's Docker image no longer ships Google Analytics or the Crisp
-  chat widget (they pointed at the original maintainer's accounts); a
-  privacy-respecting, self-hostable replacement (e.g.
+  chat widget, since they pointed at the original maintainer's accounts. A
+  privacy-respecting, self-hostable replacement (like
   [Plausible](https://plausible.io/) or [Umami](https://umami.is/)) hasn't
   been added.
 * More testing (search: `TODO(test)`)
@@ -263,4 +272,4 @@ right ahead — there are a few paths depending on what you're optimizing for:
 ## Copyright & license
 
 Copyright (c) 2017-2018 Alexander Zirbel, copyright (c) 2026 Mustafahubs
-(this fork) - Code released under the [MIT license](LICENSE).
+(this fork). Code released under the [MIT license](LICENSE).
