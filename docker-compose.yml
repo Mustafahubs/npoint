@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -16,11 +17,13 @@ services:
   # tracking. Production uses Valkey; plain Redis is a drop-in for local use.
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     volumes:
       - npoint_redisdata:/data
 
   web:
     build: .
+    restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
